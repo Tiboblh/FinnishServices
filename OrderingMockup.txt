@@ -1,0 +1,28 @@
+-- This is the Ordering menu for the sustingus shop CC application, or at least a text bsaed mockup of the UI.
+-- anything up here after -- are instructions, use them when implementing this.
+-- ^ and v arrow keys are usde to navigate mostly, highlighting the current item in a light blue, makign the text white.
+-- upon selecting osmething with the [Enter], make the highlight flash green to signify it was clicked.
+-- Also, add touchscreen support for Advanced computers that have that function.
+-- On top of that, if something has a letter in [], (such as [S]earch), that means it is selected by pressing that button, and should do something, like selecting the search bar.
+-- also, make the left/right arrow keys used as an alternative to C to switch between the Cart and Catalog. if an item is selected from catalog it increments itself in cart by 1 & decrements stock by 1, and adds itself to cart if not already present, but the opposite happens when selected while in cart.
+-- Also, the currency counts below the cart should show the total (remember the specific symbols, use those, not C and S.)
+ [[S]earch...  ] [O][Options]  | 3272c | 36s |[C]  -<Cart>-
+---------------------------------------------| Dirt 
+ [I] Catalog Items                           | x 328
+ Item            ^| Price   | Stock          | Iron Ingot
+  Dirt            | 0c 16s  | 19248          | x 15
+  Cobblestone     | 0c 32s  | 3892           | Cobblestone
+  Raw Iron        | 1c  0s  | 172            | x 592
+  Iron Ingot      | 1c 32s  | 1923           | 
+  Raw Beef        | 0c 32s  | 372            |
+                                             |
+                                             |
+                                             |
+                                             |
+                                             |
+                                             |
+                                             |
+                                             |-------------
+                                             | -<Checkout>-
+                                             | 1248c | 36s
+Page 1/1 [P][Previous] [N][Next] [E][Exit] | [Connected]

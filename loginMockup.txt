@@ -1,0 +1,59 @@
+-- Show "Sustingus shop" as a main menu that can be used to navigate to other menus via pressing the key corresponding to an option.
+-- for [ username ]/[ password ] style boxes use text input then the listed controls under register to navigate those boxes, with the y/n box under register only taking either y/n for true/false
+-- once logged in, switch to ordering screen, save "login.sav" in current dir with saved credentials such that the user does not have to log in again when using the software.
+-- Variables of username, pass, home mail address, should be saved as strings in login.sav, with public frogports being saved as a boolean 
+-- anything in {} are where certain vars should be shown, and () are instructions on what something should do
+ -<Sustingus Shop (main window, dont include this text in actual builds)>-
+  [L] Login {go to login page}
+  [R] Register
+  [H] Help
+  [E] Exit
+
+ -<Sustingus Shop {show user's saved usernme here}(window to show if saved credentials are present, dont include this text in actual builds)>-
+  [O] Order (go to menu shown in OrderingMockup.txt)
+  [S] Settings (go to menu shown in SettingsMockup.txt)
+  [L] Logout (Clears saved credentials) -- these arent instructions, leave these () alone.
+  [H] Help (go to Main Help)
+  [E] Exit (exit program and clear screen)
+
+ -<Login>-
+  [ username ]
+  [ password ]
+  [L Control]: Back (return to main window)
+  
+ -<register>-
+  Press [Enter] to go to next box, [LShift] + [Enter] to 
+  go back.
+  [ username ]
+  [ password ]
+  [ home mail address ]
+  [ use public frogports? (Y/N)]
+  <Done>
+ 
+ -<Main Help>-
+  welcome to online sustingus shop!
+  to continue, please either login to an existing account,
+  or create a new one with register.
+  if you cannot do either of those, then contact mudkip
+  or tilo for further assistance.
+  [L][Login Help]
+  [R][Register help]
+  [Left Control][Back]
+ 
+ -<Login Help>-
+  Enter a username and password to log in.
+  there isnt much else to it!
+  [Left Control][Back]
+  
+ -<Register Help>-
+  Username: a name used to identify you/login with.
+  Password: a series of characters required with a username
+   to access your account, make it something complex and 
+    rememberable.
+  Home mail address: the address of a frogport to be used
+   as your personal mailbox. this is where orders will be
+    sent by default, unless you have public frogports on.
+  Use public frogports: turn this on to be able to recieve
+   orders at public frogports. The one used automatically
+    changes depending on which one's closer.
+  [Left Control][Back]
