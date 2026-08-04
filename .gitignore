@@ -1,0 +1,4 @@
+data.db
+backend/data.db
+__pycache__
+backend/__pycache__
