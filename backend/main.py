@@ -79,7 +79,7 @@ def get_userdata(tokenname: str):
   if result != None:
     return result
   cursor.execute(
-    "SELECT username, password, home_address, public_frogports, token, balance FROM users WHERE token = ?",
+    "SELECT username, home_address, public_frogports, token, balance FROM users WHERE token = ?",
     (tokenname,)
   )
   result2 = cursor.fetchone()
@@ -87,7 +87,7 @@ def get_userdata(tokenname: str):
     return result
   return None
 
-@app.route("/api/register")
+@app.route("/api/register", methods=["POST"])
 def register():
   data = request.get_json()
   try:
@@ -99,10 +99,10 @@ def register():
   userdata = get_userdata(data.get("username"))
   if userdata == None:
     return jsonify({"error": "Your account was created but the userinfo could not be fetched"}), 500
-  username,password,homeaddr,frogports,token, balance = userdata
-  return jsonify({"username":username, "password": password, "homeaddress": homeaddr, "use_public_frogports": str(bool(frogports)), "balance": balance, "token": token}), 200
+  username,homeaddr,frogports,token, balance = userdata
+  return jsonify({"username":username, "homeaddress": homeaddr, "use_public_frogports": str(bool(frogports)), "balance": balance, "token": token}), 200
 
-@app.route("/api/login")
+@app.route("/api/login", methods=["POST"])
 def login():
   data = request.get_json()
   cursor.execute(
@@ -116,17 +116,17 @@ def login():
   userdata = get_userdata(result)
   if userdata == None:
     return jsonify({"error": "The creditentials you entered were correct but the server could not fetch your user data"}), 500
-  username,password,homeaddr,frogports,token, balance = userdata
-  return jsonify({"username":username, "password": password, "homeaddress": homeaddr, "use_public_frogports": str(bool(frogports)), "balance": balance, "token": token}), 200
+  username,homeaddr,frogports,token, balance = userdata
+  return jsonify({"username":username,  "homeaddress": homeaddr, "use_public_frogports": str(bool(frogports)), "balance": balance, "token": token}), 200
 
-@app.route("/api/user_info")
+@app.route("/api/user_info", methods=["GET"])
 @auth_required
 def user_info(token):
   userdata = get_userdata(token)
   if userdata == None:
     return jsonify({"error": "The token given was correct but the server could not fetch user data"}), 500
-  username,password,homeaddr,frogports,token, balance = userdata
-  return jsonify({"username":username, "password": password, "homeaddress": homeaddr, "use_public_frogports": str(bool(frogports)), "balance": balance, "token": token}), 200
+  username,homeaddr,frogports,token, balance = userdata
+  return jsonify({"username":username, "homeaddress": homeaddr, "use_public_frogports": str(bool(frogports)), "balance": balance, "token": token}), 200
 
 if __name__ == "__main__":
   app.run(debug=True,port=9142)
