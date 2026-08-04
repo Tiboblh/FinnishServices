@@ -1,0 +1,20 @@
+ [[S]earch...  ] [O][Ordering]                | 3272� | 36� 
+------------------------------------------------------------ 
+Account | Help | we dont have anymore categories |
+ Change password [ current ] [ new ]
+ Change home address {CurrentAddrHere} [ input new... ]                         
+           
+            
+             
+              
+              
+              
+                                             
+                                             
+                                             
+                                             
+                                             
+                                             
+                                             
+                                          
+[E][Exit] [Connected]

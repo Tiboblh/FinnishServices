@@ -1,0 +1,20 @@
+ [[S]earch...  ] [O][Options]  | 3272c | 36s |[C]  -<Cart>-
+---------------------------------------------| Dirt 
+ [I] Catalog Items                           | x 328
+ Item            ^| Price   | Stock          | Iron Ingot
+  Dirt            | 0c 16s  | 19248          | x 15
+  Cobblestone     | 0c 32s  | 3892           | Cobblestone
+  Raw Iron        | 1c  0s  | 172            | x 592
+  Iron Ingot      | 1c 32s  | 1923           | 
+  Raw Beef        | 0c 32s  | 372            |
+                                             |
+                                             |
+                                             |
+                                             |
+                                             |
+                                             |
+                                             |
+                                             |-------------
+                                             | -<Checkout>-
+                                             | 1248c | 36s
+Page 1/1 [P][Previous] [N][Next] [E][Exit] | [Connected]

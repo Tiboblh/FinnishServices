@@ -1,0 +1,15 @@
+local
+expect=require"cc.expect".expect
+local
+usePeripheralsValue=true
+local
+function
+usePeripherals(value)expect(1,value,"boolean","nil")if
+value~=nil
+then
+usePeripheralsValue=value
+end
+return
+usePeripheralsValue
+end
+return{usePeripherals=usePeripherals,}
