@@ -1,1 +1,0 @@
-This is a seperate library from github, used to handle some password hashing. leave it alone please.
