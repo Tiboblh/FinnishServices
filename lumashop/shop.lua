@@ -6,12 +6,11 @@ local sha256 = require("ccryptolib.sha256")
 -- var setup
 local loggedIn = false --init
 local savePath = "/lumashop/login.sav" -- this should match the directory that the client is in.
-local modemstatus = 0 -- init
-local modemSide = nil -- init
 local username = "DefaultUsername"
 local token = "" -- init
-local serveraddr = "localhost:9142" -- server to contact for account and ordering, leave this alone.
+local serveraddr = "http://vps-2ddc970b.vps.ovh.net:9142" -- server to contact for account and ordering, leave this alone.
 local funds = 0 --init
+userData = {}
 local cartContents = {}
 local catalogContents = { -- this is testing stuff, will be set to empty for init later on
     { -- dirt
@@ -239,6 +238,12 @@ function clearScreen()
     term.setCursorPos(1, 1)
 end
 
+local function str2hexa(s)
+    return (string.gsub(s, ".", function(c)
+        return string.format("%02x", string.byte(c))
+    end))
+end
+
 function getCatalogPageIndexes(page)
     local pageSize = 14
     page = tonumber(page) or 1
@@ -275,21 +280,54 @@ function saveToken()
 end
 
 function contactServer(mode, data)
-    if type(data) ~= "table" then
-        error("Internal error: data to contact server must be a table, not a " .. type(data))
+    if mode ~= "user_info" and not data then
+        error("data must be provided for mode: " .. tostring(mode))
     end
 
     if mode == "login" then
-        url = "http://" .. serveraddr .. "/api/login"
-    end
-    if mode == "register" then
-        url = "http://" .. serveraddr .. "/api/register"
-    end
-    if mode == "catalog" then
-        error("Catalog not implemented on server.")
-
+        local url = serveraddr .. "/api/login"
+        local headers = {["Content-Type"] = "application/json"}
+        local payload = data
+        local response = http.post(url, textutils.serialiseJSON(payload), headers)
+        
+        if response then
+            local data = textutils.unserializeJSON(response)
+            return data
+        else
+            error("The server did not respond with user data. perhaps you typed a wrong username or password?")
+        end
+        if not(data.username or data.password) then
+            error("missing one or more components to login")
+        end
+    elseif mode == "register" then
+        local url = serveraddr .. "/api/register"
+        local headers = {["Content-Type"] = "application/json"}
+        local payload = data
+        local response = http.post(url, textutils.serialiseJSON(payload), headers)
+        
+        if response then
+            local data = response
+            return data
+        else
+            error("The server did not respond. perhaps you typed something wrong?")
+        end
+        if not(data.username or data.password or data.home_address or data.use_public_frogports) then
+            error("missing one or more components to register")
+        end
+    elseif mode == "user_info" then
+        local url = serveraddr .. "/api/user_info"
+        local headers = {["Authorization"] = "Bearer " .. token}
+        local response = http.get(url, headers)
+        if response then
+            local body = response.readAll()
+            local data = textutils.unserializeJSON(body)
+            if type(data) == "table" then
+                return data
+            end
+        end
+        return nil
     else
-        error("Internal error: unknown mode for contacting server: " .. tostring(mode))
+        error("unknown mode for contacting server: " .. tostring(mode))
     end
 end
 
@@ -356,24 +394,26 @@ function renderMenu(menuName)
     end
 end
 
-function login(boot)
-    if boot then
-        if token == "fakeToken1" then
-            loggedIn = true
-            username = "Fake User"
-            main()
-        end
-    else
-        clearScreen()
-        print("user account stuff isn't yet implemented, so you will be \"signed in\" as a fake user.")
-        print("press [Enter] to continue")
-        username = "Fake User"
-        loggedIn = true
-        token = "fakeToken1"
-        saveToken()
-        waitForEnter()
-        main()
-    end
+function login()
+    clearScreen()
+    print("-<Log in>-")
+    
+    print("Username: ")
+    local username_input = read()
+    print("Password: ")
+    local password_input = read("*")
+
+    local payload = {
+        username = username_input,
+        password = str2hexa(sha256.digest(password_input))
+    }
+    local serverResponse = contactServer("login", payload)
+    username = username_input
+    loggedIn = true
+    token = serverResponse["token"]
+    saveToken()
+    waitForEnter()
+    main()
 end
 
 function logout()
@@ -388,6 +428,8 @@ function logout()
     waitForEnter()
     username = ""
     token = ""
+    funds = 0
+    userData = {}
     fs.delete(savePath) -- delete the login.sav file to remove token.
     loggedIn = false
     main()
@@ -395,10 +437,35 @@ end
 
 function register()
     clearScreen()
-    print("user account stuff isn't yet implemented, so you will be \"registered\" as a fake user.")
-    print("press [Enter] to continue")
-    waitForEnter()
-    username = "Fake User"
+    print("-<Register>-")
+    print("Username: ")
+    local username_input = read()
+    print("Password: ")
+    local password_input = read("*")
+    print("Home Frogport Address: ")
+    local home_addr_input = read()
+    print ("Use public frogports? [Y/N]")
+    local public_frogport_input = nil
+    while true do
+        local event, key = os.pullEvent("key")
+        if key == keys.y then
+            public_frogport_input = true
+            break
+        elseif key == keys.n then
+            public_frogport_input = false
+            break
+        end
+    end
+    local payload = {
+        username = username_input,
+        password = str2hexa(sha256.digest(password_input)),
+        home_address = home_addr_input,
+        use_public_frogports = public_frogport_input
+    }
+    local response = contactServer("register", payload)
+    username = username_input
+    funds = 0
+    token = ""
     loggedIn = true
     main()
 end
@@ -521,14 +588,96 @@ function catalog()
         io.write(">")
     end
 
-    
+    local function redrawFunds(newfunds)
+        local cogs = math.floor(newfunds / 64)
+        local spurs = newfunds % 64
+        local cogsStr = tostring(cogs)
+        while #cogsStr < 4 do
+            cogsStr = "0" .. cogsStr
+        end
+        if cogs >= 10000 then
+            cogsStr = "OVER"
+        end
+        local spursStr = tostring(spurs)
+        while #spursStr < 2 do
+            spursStr = "0" .. spursStr
+        end
+        term.setCursorPos(36, 1)
+        io.write(cogsStr .. "c | " .. spursStr .. "s")
+    end
+
+    local function redrawItem(indexOnScreen, newstock)
+        if indexOnScreen < 1 or indexOnScreen > #pageIndexes then
+            return
+        end
+        local idx = pageIndexes[indexOnScreen]
+        if not idx then
+            return
+        end
+        local item = catalogContents[idx]
+        if newstock then
+            term.setCursorPos(itemStockX, itemStartY + indexOnScreen - 1)
+            print(newstock)
+        end
+    end
+
+    local function redrawCart(contents)
+        local cartY = 2
+        -- Clear cart area
+        for i = 4, 16 do
+            term.setCursorPos(48, i)
+            io.write("            ")
+        end
+        -- Draw cart items (up to 7 items)
+        for i = 1, math.min(7, #contents) do
+            local entry = contents[i]
+            local itemStr = string.sub(entry.name, 1, 12) .. " x" .. entry.count
+            term.setCursorPos(48, cartY + i - 1)
+            io.write(itemStr)
+        end
+    end
+
+    local function redrawTotal(newTotal)
+        local cogs = math.floor(newTotal / 64)
+        local spurs = newTotal % 64
+        local cogsStr = string.format("%04d", cogs)
+        local spursStr = string.format("%02d", spurs)
+        term.setCursorPos(48, 19)
+        io.write(cogsStr .. "c | " .. spursStr .. "s")
+    end
+
+    local function calculateTotal(cart)
+        local total = 0
+        for _, entry in ipairs(cart) do
+            local item = nil
+            for _, catalogItem in ipairs(catalogContents) do
+                if catalogItem.id == entry.id then
+                    item = catalogItem
+                    break
+                end
+            end
+            if item then
+                total = total + (item.price * entry.count)
+            end
+        end
+        return total
+    end
+
+    local function calcItemCount(cart)
+        local count = 0
+        for _, entry in ipairs(cart) do
+            count = count + entry.count
+        end
+        return count
+    end
+
     drawCatalogPage()
 
     while not checkout do
         local event, key = os.pullEvent("key")
         if event == "key" then
             local keyName = keys.getName(key)
-            if keyName == "up" then
+            if keyName == "up" then -- go up
                 if selectedItemIndex > 1 then
                     term.setCursorPos(1, selectedItemIndex + 4)
                     io.write(" ")
@@ -541,7 +690,7 @@ function catalog()
                     selectedItemIndex = #prevPageIndexes
                     drawCatalogPage()
                 end
-            elseif keyName == "down" then
+            elseif keyName == "down" then -- go down
                 if selectedItemIndex < #pageIndexes then
                     term.setCursorPos(1, selectedItemIndex + 4)
                     io.write(" ")
@@ -556,7 +705,7 @@ function catalog()
                         drawCatalogPage()
                     end
                 end
-            elseif keyName == "enter" then
+            elseif keyName == "enter" then -- select (add 2 cart)
                 local catalogIndex = pageIndexes[selectedItemIndex]
                 if catalogIndex then
                     local item = catalogContents[catalogIndex]
@@ -578,8 +727,20 @@ function catalog()
                     end
                 end
                 drawCatalogPage()
-            elseif keyName == "c" then
+                redrawCart(cartContents)
+                local total = calculateTotal(cartContents)
+                redrawTotal(total)
+            elseif keyName == "c" then -- checkout
                 checkout = true
+            elseif keyName == "e" then -- exit
+                sleep(0.1)
+                clearScreen()
+                return
+            elseif keyName == "o" then -- options
+                openOptionsMenu()
+            elseif keyname == "s" then --shopList
+                print("Shop list not yet implemented.")
+                waitForEnter()
             end
         end
     end
@@ -596,6 +757,15 @@ function catalog()
     main()
 end
 
+function checkout()
+    clearScreen()
+    print("Checkout is not yet implemented.")
+    print("Press [Enter] to return to main menu.")
+    waitForEnter()
+    main()
+end
+
+
 function openOptionsMenu()
     clearScreen()
     print("Options are not yet implemented.")
@@ -606,18 +776,24 @@ end
 
 -- program start
 clearScreen() -- clear screen before we do anything
-if fs.exists(savePath) then -- check for previous login, and if found read token from it
+if fs.exists(savePath) then -- check for previous login, and if found read token from it and attempt to login
     local file = fs.open(savePath, "r")
     if file then
         local fileContents = file.readAll()
         file.close()
 
         token = tostring(fileContents)
-        if token == "fakeToken1" then
+        local serverResponse = contactServer("user_info")
+        if serverResponse then
+            funds = serverResponse["balance"]
+            username = serverResponse["username"]
+            userData = serverResponse
             loggedIn = true
+
         end
+
     end
 end
-login(true) -- check for login.sav and log in if found
 main()
 clearScreen()
+contactServer("user_info")
