@@ -6,6 +6,8 @@ from auth import auth_required
 
 catalog = Blueprint("catalog", __name__)
 
+SPECIAL_TOKEN = "c48c42e49730405b65a1fe94e813a601b18273cab760fbfec02635d1457c8356"
+
 
 def format_lua(items):
     def lua_quote(value):
@@ -31,9 +33,68 @@ def format_lua(items):
     return "\n".join(lines)
 
 
-@catalog.route("/api/catalog", methods=["GET"])
+@catalog.route("/api/catalog", methods=["GET", "POST"])
 @auth_required
-def get_catalog(token):
+def catalog_api(token):
+
+    # POST : ajout d'un item, uniquement avec le token spécial
+    if request.method == "POST":
+        if token != SPECIAL_TOKEN:
+            return jsonify({
+                "error": "Unauthorized"
+            }), 403
+
+        data = request.get_json(silent=True)
+
+        if not data:
+            return jsonify({
+                "error": "JSON body required"
+            }), 400
+
+        required = ("name", "price", "stock")
+
+        missing = [field for field in required if field not in data]
+
+        if missing:
+            return jsonify({
+                "error": "Missing fields",
+                "fields": missing
+            }), 400
+
+        try:
+            conn = get_db_connection()
+
+            conn.execute(
+                """
+                INSERT INTO catalog ( name, price, stock)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    data["name"],
+                    data["price"],
+                    data["stock"]
+                )
+            )
+
+            conn.commit()
+            conn.close()
+
+        except Exception as e:
+            return jsonify({
+                "error": str(e)
+            }), 500
+
+        return jsonify({
+            "success": True,
+            "item": {
+                "id": data["id"],
+                "name": data["name"],
+                "price": data["price"],
+                "stock": data["stock"]
+            }
+        }), 201
+
+    # GET
     conn = get_db_connection()
 
     items = conn.execute(
