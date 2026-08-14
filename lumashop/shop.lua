@@ -1,18 +1,19 @@
--- Luma Shop Client
+---@diagnostic disable: need-check-nil
+-- lua Shop Client
 --  Please dont modify this, its a mess of spaghetti code.
 
 -- importing the sha256 thing
 local sha256 = require("ccryptolib.sha256")
 -- var setup
 local loggedIn = false --init
-local savePath = "/lumashop/login.sav" -- this should match the directory that the client is in.
+local savePath = "/luashop/login.sav" -- this should match the directory that the client is in.
 local username = "DefaultUsername"
 local token = "" -- init
 local serveraddr = "http://vps-2ddc970b.vps.ovh.net:9142" -- server to contact for account and ordering, leave this alone.
 local funds = 0 --init
-userData = {}
+local userData = {}
 local cartContents = {}
-local catalogContents = { -- this is testing stuff, will be set to empty for init later on
+local catalogContents = { -- this is testing stuff, will be set to empty for init later on, or just renamed idk
     { -- dirt
         id="minecraft:dirt", -- ID of item, for requesting internally
         name="Dirt", --actual name of item, displayed to user (MUST BE 16 CHARS OR LESS (12 or less for cart display))
@@ -185,19 +186,20 @@ local catalogContents = { -- this is testing stuff, will be set to empty for ini
         locked=false
     }
 } 
+local catalogContents_ = {}
 
 -- string sets, easier to modify like this
 local menuAssets = {
     MainMenu = {
         keybinds = {{"L", "login"}, {"R", "register"}, {"E", "sleep(0.1); return 0"}},
-        text = {" -<Luma Shop Client (No User)>-",
+        text = {" -<lua Shop Client (No User)>-",
                 "  [L] Login",
                 "  [R] Register",
                 "  [E] Exit"}
     },
     loggedInMenu = {
         keybinds = {{"C", "catalog"}, {"O", "options"}, {"L", "logout"}, {"E", "sleep(0.1); return 0"}},
-        text = {" -<Luma Shop Client (" .. tostring(username) .. ")>-",
+        text = {" -<lua Shop Client (" .. tostring(username) .. ")>-",
                 "  [C] Catalog", 
                 "  [O] Options",
                 "  [L] Logout",
@@ -205,30 +207,74 @@ local menuAssets = {
     },
     logOutConfirm = {
         keybinds = {{"Y", "confirmLogout"}, {"N", "cancelLogout"}},
-        text = {" -<Luma Shop Client (" .. tostring(username) .. ")>-",
+        text = {" -<lua Shop Client (" .. tostring(username) .. ")>-",
                 "  Are you sure you want to log out?",
                 "  [Y] Yes",
                 "  [N] No"}
+    },
+    options = {
+        keybinds = {{"U", "changeUsername"}, {"P", "changePassword"}, {"A", "changeAddress"}, {"F", "togglePubFrogports"}, {"B", "cancelLogout"}},
+        text = {
+            " -<Options (" .. tostring(username) ..")>-",
+            "  [U] Change Username",
+            "  [P] Change Password",
+            "  [A] Change Address",
+            "  [F] Toggle Public frogports ( currently " .. tostring(userData["use_public_frogports"]) .. ")",
+            "  [B] Back"
+        }
     }
 }
 
+local optionsFuncs = {
+    changeUsername = function ()
+        clearScreen() -- same as change pass func but for username
+        print("Not Implemented")
+        print("[Enter]: Back/Exit]")
+        waitForEnter()
+    end,
+    changePassword = function ()
+        clearScreen() -- this may not actually be implemented, token related nonsense. (it just dodes same as change address but for pass)
+        print("Not Implemented")
+        print("[Enter]: Back/Exit]")
+        waitForEnter()
+    end,
+    changeAddress = function ()
+        clearScreen() -- this should give a text prompt that requests a new address, sends it to server to update
+        print("Not Implemented")
+        print("[Enter]: Back/Exit]")
+        waitForEnter()
+    end,
+    togglePubFrogports = function ()
+        clearScreen() -- this function should send a reqeust to the server to toggle Public Frogports, and then reload the options menu
+        print("Not Implemented")
+        print("[Enter]: Back/Exit]")
+        waitForEnter()
+    end
+}
+
 local menuActions = {
-    ["login"] = function() return login(false) end,
+    ["login"] = function() return login() end,
     ["register"] = function() return register() end,
     ["catalog"] = function() return catalog() end,
-    ["options"] = function() return openOptionsMenu() end,
     ["logout"] = function() return logout() end,
     ["cancelLogout"] = function() return main() end,
     ["confirmLogout"] = function() return true end,
     ["MainMenu"] = function() return renderMenu("MainMenu") end,
-    ["loggedInMenu"] = function() return renderMenu("loggedInMenu") end
+    ["loggedInMenu"] = function() return renderMenu("loggedInMenu") end,
+    ["options"] = function() return renderMenu("options") end,
+    ["changeUsername"] = function() return optionsFuncs.changeUsername() end,
+    ["changePassword"] = function() return optionsFuncs.changePassword() end,
+    ["changeAddress"] = function() return optionsFuncs.changeAddress() end,
+    ["togglePubFrogports"] = function() return optionsFuncs.togglePubFrogports() end
 }
 
 function waitForEnter()
-    while true do
-        local event, key = os.pullEvent("key")
+    local resolve = false
+    while not resolve do
+        local _, pressedKey = os.pullEvent("key")
+        local key = pressedKey
         if key == keys.enter then
-            return
+            resolve = true
         end
     end
 end
@@ -238,7 +284,7 @@ function clearScreen()
     term.setCursorPos(1, 1)
 end
 
-local function str2hexa(s)
+function str2hexa(s)
     return (string.gsub(s, ".", function(c)
         return string.format("%02x", string.byte(c))
     end))
@@ -309,7 +355,7 @@ function contactServer(mode, data)
             local data = response
             return data
         else
-            error("The server did not respond. perhaps you typed something wrong?")
+            error("The server did not respond. perhaps you input an already taken username?")
         end
         if not(data.username or data.password or data.home_address or data.use_public_frogports) then
             error("missing one or more components to register")
@@ -326,12 +372,24 @@ function contactServer(mode, data)
             end
         end
         return nil
+    elseif mode == "catalog_fetch" then
+        local url = serveraddr .. "/api/catalog"
+        local headers = {["Authorization"] = "Bearer " .. token}
+        local response = http.get(url, headers)
+        if response then
+            local body = response.readAll()
+            local data = textutils.unserializeJSON(body)
+            if type(data) == "table" then
+                return data
+            end
+        end
     else
         error("unknown mode for contacting server: " .. tostring(mode))
     end
 end
 
 function renderMenu(menuName)
+    sleep(0.1)
     local menu = menuAssets[menuName]
     if not menu then
         return nil
@@ -346,7 +404,15 @@ function renderMenu(menuName)
     end
 
     if menuName == "loggedInMenu" then
-        menu.text[1] = " -<Luma Shop Client (" .. tostring(username) .. ")>-"
+        menu.text[1] = " -<lua Shop Client (" .. tostring(username) .. ")>-"
+    end
+
+    if menuName == "options" then
+        menu.text[1] = " -<Options (" .. tostring(username) ..")>-"
+    end
+
+    if menuName == "options" then
+        menu.text[5] = "  [F] Toggle Public frogports ( currently " .. tostring(userData["use_public_frogports"]) .. " )"
     end
 
     clearScreen()
@@ -483,7 +549,7 @@ end
 function catalog()
     clearScreen()
     term.setCursorPos(1,1)
-    funds = 39572 -- testing funds ammount
+    -- local catalogContents = contactServer("catalog_fetch")
     local cogs = math.floor(funds / 64)
     local spurs = funds % 64
     local curpage = 1
@@ -498,13 +564,14 @@ function catalog()
     checkout = false -- init, not checking out by default
     local cartStartX = 48
     local cartStartY = 2
+    visualCart = {}
     do -- fancy format cogs
         local n = cogs
-        if n >= 10000 then
-            cogs = "OVER"
+        if n >= 1000000 then
+            cogs = "999999+"
         else
             local s = tostring(n)
-            while #s < 4 do
+            while #s < 7 do
                 s = "0" .. s
             end
             cogs = s
@@ -526,7 +593,7 @@ function catalog()
     local function drawCatalogPage()
         clearScreen()
         term.setCursorPos(1, 1)
-        print(' [S]: Shops [O]: Options       | ' .. cogs .. "c | " .. spurs .. "s |  -<Cart>-")
+        print(' [S]: Shops [O]: Options    | ' .. cogs .. "c | " .. spurs .. "s |  -<Cart>-")
         term.setCursorPos(1, 2)
         print("---------------------------------------------|")
         term.setCursorPos(1, 3)
@@ -538,13 +605,13 @@ function catalog()
             print("|")
         end
         term.setCursorPos(46,17)
-        print("|-------------")
+        print("|")
         term.setCursorPos(46, 18)
-        print("|  -<Total>-")
+        print("|-------------")
         term.setCursorPos(46, 19)
         print("| 0000c | 00s")
         term.setCursorPos(1,20)
-        io.write("Page "..curpage.."/"..totalpage.." [C]: Checkout [E]: Exit")
+        io.write("Page "..curpage.."/"..totalpage.." [C]: Checkout [E]: Exit             |  -<Total>-")
 
         pageIndexes = getCatalogPageIndexes(curpage)
         if selectedItemIndex > #pageIndexes then
@@ -588,39 +655,6 @@ function catalog()
         io.write(">")
     end
 
-    local function redrawFunds(newfunds)
-        local cogs = math.floor(newfunds / 64)
-        local spurs = newfunds % 64
-        local cogsStr = tostring(cogs)
-        while #cogsStr < 4 do
-            cogsStr = "0" .. cogsStr
-        end
-        if cogs >= 10000 then
-            cogsStr = "OVER"
-        end
-        local spursStr = tostring(spurs)
-        while #spursStr < 2 do
-            spursStr = "0" .. spursStr
-        end
-        term.setCursorPos(36, 1)
-        io.write(cogsStr .. "c | " .. spursStr .. "s")
-    end
-
-    local function redrawItem(indexOnScreen, newstock)
-        if indexOnScreen < 1 or indexOnScreen > #pageIndexes then
-            return
-        end
-        local idx = pageIndexes[indexOnScreen]
-        if not idx then
-            return
-        end
-        local item = catalogContents[idx]
-        if newstock then
-            term.setCursorPos(itemStockX, itemStartY + indexOnScreen - 1)
-            print(newstock)
-        end
-    end
-
     local function redrawCart(contents)
         local cartY = 2
         -- Clear cart area
@@ -629,11 +663,14 @@ function catalog()
             io.write("            ")
         end
         -- Draw cart items (up to 7 items)
-        for i = 1, math.min(7, #contents) do
+        for i = 1, math.min(8, #contents) do
             local entry = contents[i]
-            local itemStr = string.sub(entry.name, 1, 12) .. " x" .. entry.count
-            term.setCursorPos(48, cartY + i - 1)
-            io.write(itemStr)
+            local itemStr1 = string.sub(entry.name, 1, 12)
+            term.setCursorPos(48, cartY + (i*2) - 2)
+            io.write(itemStr1)
+            local itemStr2 = " x" .. entry.count
+            term.setCursorPos(48, cartY + (i*2) - 1)
+            io.write(itemStr2)
         end
     end
 
@@ -664,11 +701,29 @@ function catalog()
     end
 
     local function calcItemCount(cart)
-        local count = 0
+        local output = {}
+        local seen = {}
         for _, entry in ipairs(cart) do
-            count = count + entry.count
+            if seen[entry.id] then
+                seen[entry.id].count = seen[entry.id].count + entry.count
+            else
+                local item = nil
+                for _, catalogItem in ipairs(catalogContents) do
+                    if catalogItem.id == entry.id then
+                        item = catalogItem
+                        break
+                    end
+                end
+                local itemCopy = {
+                    id = entry.id,
+                    name = item and item.name or entry.name,
+                    count = entry.count * item.pack
+                }
+                seen[entry.id] = itemCopy
+                output[#output + 1] = itemCopy
+            end
         end
-        return count
+        return output
     end
 
     drawCatalogPage()
@@ -727,29 +782,48 @@ function catalog()
                     end
                 end
                 drawCatalogPage()
-                redrawCart(cartContents)
-                local total = calculateTotal(cartContents)
-                redrawTotal(total)
+                visualCart = calcItemCount(cartContents)
+                redrawCart(visualCart)
+                redrawTotal(calculateTotal(cartContents))
+            elseif keyName == "leftCtrl" then
+                local catalogIndex = pageIndexes[selectedItemIndex]
+                if catalogIndex then
+                    local item = catalogContents[catalogIndex]
+                    local existing = nil
+                    for idx, entry in ipairs(cartContents) do
+                        if entry.id == item.id then
+                            existing = idx
+                            break
+                        end
+                    end
+                    if existing then
+                        if cartContents[existing].count > 1 then
+                            cartContents[existing].count = cartContents[existing].count - 1
+                        else
+                            table.remove(cartContents, existing)
+                        end
+                    end
+                end
+                drawCatalogPage()
+                visualCart = calcItemCount(cartContents)
+                redrawCart(visualCart)
+                redrawTotal(calculateTotal(cartContents))
             elseif keyName == "c" then -- checkout
                 checkout = true
             elseif keyName == "e" then -- exit
                 sleep(0.1)
                 clearScreen()
+                main()
                 return
             elseif keyName == "o" then -- options
-                openOptionsMenu()
+                renderMenu("options")
             elseif keyname == "s" then --shopList
                 print("Shop list not yet implemented.")
                 waitForEnter()
             end
         end
     end
-    clearScreen()
-    print("Cart Contents:")
-    for i, entry in ipairs(cartContents) do
-        print(textutils.serialize(entry))
-    end
-    print("Press [Enter] to return to main menu.")
+    checkoutFunc()
     
 
 
@@ -757,21 +831,130 @@ function catalog()
     main()
 end
 
-function checkout()
+function exit()
+    error("", 0)
+end
+
+function checkoutFunc()
     clearScreen()
-    print("Checkout is not yet implemented.")
-    print("Press [Enter] to return to main menu.")
-    waitForEnter()
+    local function calculateTotal(cart)
+        local total = 0
+        for _, entry in ipairs(cart) do
+            local item = nil
+            for _, catalogItem in ipairs(catalogContents) do
+                if catalogItem.id == entry.id then
+                    item = catalogItem
+                    break
+                end
+            end
+            if item then
+                total = total + (item.price * entry.count)
+            end
+        end
+        return total
+    end
+
+    local function calcItemCount(cart)
+        local output = {}
+        local seen = {}
+        for _, entry in ipairs(cart) do
+            if seen[entry.id] then
+                seen[entry.id].count = seen[entry.id].count + entry.count
+            else
+                local item = nil
+                for _, catalogItem in ipairs(catalogContents) do
+                    if catalogItem.id == entry.id then
+                        item = catalogItem
+                        break
+                    end
+                end
+                local itemCopy = {
+                    id = entry.id,
+                    name = item and item.name or entry.name,
+                    count = entry.count * item.pack
+                }
+                seen[entry.id] = itemCopy
+                output[#output + 1] = itemCopy
+            end
+        end
+        return output
+    end
+    local total = calculateTotal(cartContents)
+    local visualCart = calcItemCount(cartContents)
+
+    local totalCogs = math.floor(total / 64)
+    local totalSpurs = total % 64
+
+    do -- fancy format total cogs
+        local n = totalCogs
+        if n >= 1000000 then
+            totalCogs = "999999+"
+        else
+            local s = tostring(n)
+            while #s < 7 do
+                s = "0" .. s
+            end
+            totalCogs = s
+        end
+    end
+
+    do -- fancy format total spurs
+        local n = totalSpurs
+        local s = tostring(n)
+        while #s < 2 do
+            s = "0" .. s
+        end
+        totalSpurs = s
+    end
+    function printOrder()
+        for i, item in ipairs(visualCart) do
+            local itemstr = " " .. item.name .. " x " .. item.count
+            if i <= 18 then
+                term.setCursorPos(1, i + 1)
+                io.write(itemstr)
+            elseif i <= 36 then
+                term.setCursorPos(21, i - 17)
+                io.write(itemstr)
+            elseif i <= 54 then
+                term.setCursorPos(41, i - 35)
+                io.write(itemstr)
+            else
+                return
+            end
+        end
+    end
+    term.setCursorPos(1,1)
+    io.write("-<Checkout>-")
+    term.setCursorPos(1,20)
+    io.write("[Y]: Purchase  [N]: Cancel  [E]: Exit  Total: " .. totalCogs .. "c " .. totalSpurs .. "s")
+    printOrder()
+    local done = false
+    while not done do
+        local event, key = os.pullEvent("key")
+        if event and key then
+            if key == keys.y then
+                -- contactServer("checkout", cartContents) -- this is commented out for now, till server has this implemented
+                clearScreen()
+                print("Since the server doesnt have checkout implemented, just imagine that you got your items delivered and balance reduced by combined price of your order.")
+                print("")
+                print("[Enter]: exit/back")
+                waitForEnter()
+                done = true
+            elseif key == keys.n then
+                clearScreen()
+                cartContents = {}
+                catalog()
+                done = true
+            elseif key == keys.e then
+                done = true
+                clearScreen()
+                exit()
+            end
+        end
+    end
     main()
 end
 
-
-function openOptionsMenu()
-    clearScreen()
-    print("Options are not yet implemented.")
-    waitForEnter()
-    main()
-end
 
 
 -- program start
@@ -796,4 +979,3 @@ if fs.exists(savePath) then -- check for previous login, and if found read token
 end
 main()
 clearScreen()
-contactServer("user_info")
