@@ -16,10 +16,10 @@ def get_user(value):
         SELECT id, username, password, home_address,
                public_frogports, balance, token
         FROM users
-        WHERE username = ? OR token = ?
+        WHERE id = ? OR username = ? OR token = ?
         LIMIT 1
         """,
-        (value, value)
+        (value, value, value)
     ).fetchone()
 
     conn.close()
@@ -123,13 +123,77 @@ def login():
     })
 
 
-@users.route("/api/user_info", methods=["GET"])
+@users.route("/api/user_info", methods=["GET", "PATCH"])
 @auth_required
 def user_info(token):
     user = get_user(token)
 
     if user is None:
         return jsonify({"error": "User not found"}), 404
+
+    if request.method == "PATCH":
+        data = request.get_json(silent=True) or {}
+
+        map_fields = {
+            "username": "username",
+            "homeaddress": "home_address",
+            "home_address": "home_address",
+            "use_public_frogports": "public_frogports"
+        }
+
+        updates = {}
+        for key, db_key in map_fields.items():
+            if key not in data:
+                continue
+
+            value = data[key]
+
+            if value is None:
+                continue
+
+            if key == "username":
+                if not isinstance(value, str) or not value.strip():
+                    return jsonify({"error": "Username cannot be empty"}), 400
+
+                if value != user["username"]:
+                    existing = get_user(value)
+                    if existing is not None and existing["id"] != user["id"]:
+                        return jsonify({"error": "User already exists"}), 400
+
+                updates[db_key] = value
+
+            elif key in ("homeaddress", "home_address"):
+                if not isinstance(value, str) or not value.strip():
+                    return jsonify({"error": "Home address cannot be empty"}), 400
+                updates[db_key] = value
+
+            elif key == "use_public_frogports":
+                updates[db_key] = int(bool(value))
+
+        if not updates:
+            return jsonify({"error": "No valid fields to update"}), 400
+
+        conn = get_db_connection()
+
+        try:
+            assignments = ", ".join(f"{column} = ?" for column in updates)
+            values = list(updates.values())
+            values.append(user["id"])
+
+            conn.execute(
+                f"UPDATE users SET {assignments} WHERE id = ?",
+                tuple(values)
+            )
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            if "UNIQUE" in str(e):
+                return jsonify({"error": "User already exists"}), 400
+            return jsonify({"error": str(e)}), 500
+
+        conn.close()
+        user = get_user(user["id"])
 
     return jsonify({
         "username": user["username"],
