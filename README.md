@@ -93,11 +93,12 @@ Possible errors:
 - `401` unauthorized
 - `404` user not found
 
-#### PATCH /api/user_info
+#### POST /api/user_info
 Partially updates the authenticated user.
 
 Headers:
 ```http
+X-USER-CHANGE: True
 Authorization: Bearer <token>
 ```
 
