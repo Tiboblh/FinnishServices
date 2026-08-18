@@ -27,6 +27,16 @@ def get_user(value):
     return user
 
 
+def user_response(user):
+    return jsonify({
+        "username": user["username"],
+        "homeaddress": user["home_address"],
+        "use_public_frogports": bool(user["public_frogports"]),
+        "balance": user["balance"],
+        "token": user["token"]
+    })
+
+
 @users.route("/api/register", methods=["POST"])
 def register():
     data = request.get_json(silent=True) or {}
@@ -76,13 +86,7 @@ def register():
 
     user = get_user(username)
 
-    return jsonify({
-        "username": user["username"],
-        "homeaddress": user["home_address"],
-        "use_public_frogports": bool(user["public_frogports"]),
-        "balance": user["balance"],
-        "token": user["token"]
-    })
+    return user_response(user)
 
 
 @users.route("/api/login", methods=["POST"])
@@ -114,16 +118,10 @@ def login():
     if user is None:
         return jsonify({"error": "Username or password is invalid"}), 400
 
-    return jsonify({
-        "username": user["username"],
-        "homeaddress": user["home_address"],
-        "use_public_frogports": bool(user["public_frogports"]),
-        "balance": user["balance"],
-        "token": user["token"]
-    })
+    return user_response(user)
 
 
-@users.route("/api/user_info", methods=["GET", "PATCH"])
+@users.route("/api/user_info", methods=["GET", "POST"])
 @auth_required
 def user_info(token):
     user = get_user(token)
@@ -131,74 +129,102 @@ def user_info(token):
     if user is None:
         return jsonify({"error": "User not found"}), 404
 
-    if request.method == "PATCH":
-        data = request.get_json(silent=True) or {}
+    # GET: simply return the current user information
+    if request.method == "GET":
+        return user_response(user)
 
-        map_fields = {
-            "username": "username",
-            "homeaddress": "home_address",
-            "home_address": "home_address",
-            "use_public_frogports": "public_frogports"
-        }
+    # POST: require the special header
+    if request.headers.get("X-USER-CHANGE") != "True":
+        return jsonify({
+            "error": "X-USER-CHANGE header must be set to True"
+        }), 403
 
-        updates = {}
-        for key, db_key in map_fields.items():
-            if key not in data:
-                continue
+    data = request.get_json(silent=True) or {}
 
-            value = data[key]
+    map_fields = {
+        "username": "username",
+        "homeaddress": "home_address",
+        "home_address": "home_address",
+        "use_public_frogports": "public_frogports"
+    }
 
-            if value is None:
-                continue
+    updates = {}
 
-            if key == "username":
-                if not isinstance(value, str) or not value.strip():
-                    return jsonify({"error": "Username cannot be empty"}), 400
+    for key, db_key in map_fields.items():
+        if key not in data:
+            continue
 
-                if value != user["username"]:
-                    existing = get_user(value)
-                    if existing is not None and existing["id"] != user["id"]:
-                        return jsonify({"error": "User already exists"}), 400
+        value = data[key]
 
-                updates[db_key] = value
+        if value is None:
+            continue
 
-            elif key in ("homeaddress", "home_address"):
-                if not isinstance(value, str) or not value.strip():
-                    return jsonify({"error": "Home address cannot be empty"}), 400
-                updates[db_key] = value
+        if key == "username":
+            if not isinstance(value, str) or not value.strip():
+                return jsonify({
+                    "error": "Username cannot be empty"
+                }), 400
 
-            elif key == "use_public_frogports":
-                updates[db_key] = int(bool(value))
+            if value != user["username"]:
+                existing = get_user(value)
 
-        if not updates:
-            return jsonify({"error": "No valid fields to update"}), 400
+                if existing is not None and existing["id"] != user["id"]:
+                    return jsonify({
+                        "error": "User already exists"
+                    }), 400
 
-        conn = get_db_connection()
+            updates[db_key] = value
 
-        try:
-            assignments = ", ".join(f"{column} = ?" for column in updates)
-            values = list(updates.values())
-            values.append(user["id"])
+        elif key in ("homeaddress", "home_address"):
+            if not isinstance(value, str) or not value.strip():
+                return jsonify({
+                    "error": "Home address cannot be empty"
+                }), 400
 
-            conn.execute(
-                f"UPDATE users SET {assignments} WHERE id = ?",
-                tuple(values)
-            )
-            conn.commit()
-        except Exception as e:
-            conn.rollback()
-            conn.close()
-            if "UNIQUE" in str(e):
-                return jsonify({"error": "User already exists"}), 400
-            return jsonify({"error": str(e)}), 500
+            updates[db_key] = value
 
+        elif key == "use_public_frogports":
+            updates[db_key] = int(bool(value))
+
+    if not updates:
+        return jsonify({
+            "error": "No valid fields to update"
+        }), 400
+
+    conn = get_db_connection()
+
+    try:
+        assignments = ", ".join(
+            f"{column} = ?" for column in updates
+        )
+
+        values = list(updates.values())
+        values.append(user["id"])
+
+        conn.execute(
+            f"UPDATE users SET {assignments} WHERE id = ?",
+            tuple(values)
+        )
+
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
         conn.close()
-        user = get_user(user["id"])
 
-    return jsonify({
-        "username": user["username"],
-        "homeaddress": user["home_address"],
-        "use_public_frogports": bool(user["public_frogports"]),
-        "balance": user["balance"],
-        "token": user["token"]
-    })
+        if "UNIQUE" in str(e):
+            return jsonify({
+                "error": "User already exists"
+            }), 400
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+    conn.close()
+
+    # Re-fetch the user so POST returns exactly the same
+    # information as GET, including any updated values.
+    user = get_user(user["id"])
+
+    return user_response(user)
