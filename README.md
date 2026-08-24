@@ -35,7 +35,9 @@ Success response `200`:
   "homeaddress": "Some street 1",
   "use_public_frogports": false,
   "balance": 0,
-  "token": "<token>"
+  "token": "<token>",
+  "is_vendor": true,
+  "is_admin": false
 }
 ```
 
@@ -62,7 +64,9 @@ Success response `200`:
   "homeaddress": "Some street 1",
   "use_public_frogports": false,
   "balance": 0,
-  "token": "<token>"
+  "token": "<token>",
+  "is_vendor": true,
+  "is_admin": false
 }
 ```
 
@@ -85,7 +89,9 @@ Success response `200`:
   "homeaddress": "Some street 1",
   "use_public_frogports": false,
   "balance": 0,
-  "token": "<token>"
+  "token": "<token>",
+  "is_vendor": true,
+  "is_admin": false
 }
 ```
 
@@ -129,7 +135,9 @@ Success response `200`:
   "homeaddress": "New address 42",
   "use_public_frogports": true,
   "balance": 0,
-  "token": "<token>"
+  "token": "<token>",
+  "is_vendor": true,
+  "is_admin": false
 }
 ```
 
@@ -156,8 +164,11 @@ Success response `200`:
     {
       "id": "item-1",
       "name": "Example item",
+      "description": "Example description",
       "price": 150,
-      "stock": 20
+      "stock": 20,
+      "pack": 5,
+      "locked": false
     }
   ]
 }
@@ -179,8 +190,11 @@ Request body:
 ```json
 {
   "name": "Example item",
+  "description": "Example description"
   "price": 150,
-  "stock": 20
+  "stock": 20,
+  "pack": 5,
+  "locked": false
 }
 ```
 
@@ -190,9 +204,12 @@ Success response `201`:
   "success": true,
   "item": {
     "id": "<generated-or-provided id>",
+    "description": "Example description",
     "name": "Example item",
     "price": 150,
-    "stock": 20
+    "stock": 20,
+    "pack": 5,
+    "locked": false
   }
 }
 ```

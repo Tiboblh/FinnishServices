@@ -14,7 +14,7 @@ def get_user(value):
     user = conn.execute(
         """
         SELECT id, username, password, home_address,
-               public_frogports, balance, token
+               public_frogports, balance, token, is_vendor, is_admin
         FROM users
         WHERE id = ? OR username = ? OR token = ?
         LIMIT 1
@@ -33,7 +33,9 @@ def user_response(user):
         "homeaddress": user["home_address"],
         "use_public_frogports": bool(user["public_frogports"]),
         "balance": user["balance"],
-        "token": user["token"]
+        "token": user["token"],
+        "is_vendor": bool(user["is_vendor"]),
+        "is_admin": bool(user["is_admin"])
     })
 
 

@@ -36,8 +36,6 @@ def format_lua(items):
 @catalog.route("/api/catalog", methods=["GET", "POST"])
 @auth_required
 def catalog_api(token):
-
-    # POST : ajout d'un item, uniquement avec le token spécial
     if request.method == "POST":
         if token != SPECIAL_TOKEN:
             return jsonify({
@@ -51,7 +49,7 @@ def catalog_api(token):
                 "error": "JSON body required"
             }), 400
 
-        required = ("name", "price", "stock")
+        required = ("name", "description", "price", "stock", "pack", "locked")
 
         missing = [field for field in required if field not in data]
 
@@ -66,13 +64,16 @@ def catalog_api(token):
 
             conn.execute(
                 """
-                INSERT INTO catalog ( name, price, stock)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO catalog ( name, description, price, stock, pack, locked)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     data["name"],
+                    data["description"],
                     data["price"],
-                    data["stock"]
+                    data["stock"],
+                    data["pack"],
+                    data["locked"]
                 )
             )
 
@@ -88,9 +89,12 @@ def catalog_api(token):
             "success": True,
             "item": {
                 "id": data["id"],
+                "description": data["description"],
                 "name": data["name"],
                 "price": data["price"],
-                "stock": data["stock"]
+                "stock": data["stock"],
+                "pack": data["pack"],
+                "locked": bool(data["locked"])
             }
         }), 201
 
@@ -99,7 +103,7 @@ def catalog_api(token):
 
     items = conn.execute(
         """
-        SELECT id, name, price, stock
+        SELECT id, name, description, price, stock, pack, locked
         FROM catalog
         ORDER BY LOWER(name)
         """
