@@ -6,7 +6,7 @@ from auth import auth_required
 
 catalog = Blueprint("catalog", __name__)
 
-SPECIAL_TOKEN = "c48c42e49730405b65a1fe94e813a601b18273cab760fbfec02635d1457c8356"
+SPECIAL_TOKEN = "c48c42e49730405b65a1fe94e813a601b18273cab760fbfec02635d1457c8356" # wait do we even need this if we have the is_admin thing now?
 
 
 def format_lua(items):
