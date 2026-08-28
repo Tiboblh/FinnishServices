@@ -37,14 +37,39 @@ def format_lua(items):
 @auth_required
 def catalog_api(token):
     if request.method == "POST":
-        if token != SPECIAL_TOKEN:
+        conn = get_db_connection()
+
+        account = conn.execute(
+            """
+            SELECT is_admin
+            FROM accounts
+            WHERE token = ?
+            LIMIT 1
+            """,
+            (token,)
+        ).fetchone()
+
+        if account is None:
+            account = conn.execute(
+                """
+                SELECT is_admin
+                FROM users
+                WHERE token = ?
+                LIMIT 1
+                """,
+                (token,)
+            ).fetchone()
+
+        if account is None or not bool(account[0]):
+            conn.close()
             return jsonify({
-                "error": "Unauthorized"
+                "error": "unauthorzied"
             }), 403
 
         data = request.get_json(silent=True)
 
         if not data:
+            conn.close()
             return jsonify({
                 "error": "JSON body required"
             }), 400
@@ -54,14 +79,13 @@ def catalog_api(token):
         missing = [field for field in required if field not in data]
 
         if missing:
+            conn.close()
             return jsonify({
                 "error": "Missing fields",
                 "fields": missing
             }), 400
 
         try:
-            conn = get_db_connection()
-
             conn.execute(
                 """
                 INSERT INTO catalog ( name, description, price, stock, pack, locked)
@@ -81,6 +105,7 @@ def catalog_api(token):
             conn.close()
 
         except Exception as e:
+            conn.close()
             return jsonify({
                 "error": str(e)
             }), 500
