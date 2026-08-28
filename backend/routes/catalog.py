@@ -6,7 +6,7 @@ from auth import auth_required
 
 catalog = Blueprint("catalog", __name__)
 
-SPECIAL_TOKEN = "c48c42e49730405b65a1fe94e813a601b18273cab760fbfec02635d1457c8356" # wait do we even need this if we have the is_admin thing now?
+SPECIAL_TOKEN = "c48c42e49730405b65a1fe94e813a601b18273cab760fbfec02635d1457c8356" # tibo can we please make this have sum "is admin" tag be used instead of a specific token?
 
 
 def format_lua(items):
