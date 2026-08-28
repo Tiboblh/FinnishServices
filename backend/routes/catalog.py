@@ -1,12 +1,13 @@
 from flask import Blueprint, jsonify, request
 
 from database import get_db_connection
-from auth import auth_required
+from auth import auth_required, admin_required
 
 
 catalog = Blueprint("catalog", __name__)
 
-SPECIAL_TOKEN = "c48c42e49730405b65a1fe94e813a601b18273cab760fbfec02635d1457c8356" # tibo can we please make this have sum "is admin" tag be used instead of a specific token?
+ # tibo can we please make this have sum "is admin" tag be used instead of a specific token?
+# done, use @admin_required with routes
 
 
 def format_lua(items):
@@ -33,72 +34,10 @@ def format_lua(items):
     return "\n".join(lines)
 
 
-@catalog.route("/api/catalog", methods=["GET", "POST"])
+@catalog.route("/api/catalog", methods=["GET"])
 @auth_required
 def catalog_api(token):
-    if request.method == "POST":
-        if token != SPECIAL_TOKEN:
-            return jsonify({
-                "error": "Unauthorized"
-            }), 403
 
-        data = request.get_json(silent=True)
-
-        if not data:
-            return jsonify({
-                "error": "JSON body required"
-            }), 400
-
-        required = ("name", "description", "price", "stock", "pack", "locked")
-
-        missing = [field for field in required if field not in data]
-
-        if missing:
-            return jsonify({
-                "error": "Missing fields",
-                "fields": missing
-            }), 400
-
-        try:
-            conn = get_db_connection()
-
-            conn.execute(
-                """
-                INSERT INTO catalog ( name, description, price, stock, pack, locked)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    data["name"],
-                    data["description"],
-                    data["price"],
-                    data["stock"],
-                    data["pack"],
-                    data["locked"]
-                )
-            )
-
-            conn.commit()
-            conn.close()
-
-        except Exception as e:
-            return jsonify({
-                "error": str(e)
-            }), 500
-
-        return jsonify({
-            "success": True,
-            "item": {
-                "id": data["id"],
-                "description": data["description"],
-                "name": data["name"],
-                "price": data["price"],
-                "stock": data["stock"],
-                "pack": data["pack"],
-                "locked": bool(data["locked"])
-            }
-        }), 201
-
-    # GET
     conn = get_db_connection()
 
     items = conn.execute(
@@ -129,3 +68,66 @@ def catalog_api(token):
     return jsonify({
         "catalog": items
     })
+
+
+@catalog.route("/api/change_catalog", methods=["POST"])
+@admin_required
+def change_catalog(token):
+
+    data = request.get_json(silent=True)
+
+    if not data:
+        return jsonify({
+            "error": "JSON body required"
+        }), 400
+
+    required = ("name", "description", "price", "stock", "pack", "locked")
+
+    missing = [field for field in required if field not in data]
+
+    if missing:
+        return jsonify({
+            "error": "Missing fields",
+            "fields": missing
+        }), 400
+
+    try:
+        conn = get_db_connection()
+
+        cursor = conn.execute(
+            """
+            INSERT INTO catalog (name, description, price, stock, pack, locked)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                data["name"],
+                data["description"],
+                data["price"],
+                data["stock"],
+                data["pack"],
+                data["locked"]
+            )
+        )
+
+        item_id = cursor.lastrowid
+
+        conn.commit()
+        conn.close()
+
+    except Exception as e:
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+    return jsonify({
+        "success": True,
+        "item": {
+            "id": item_id,
+            "description": data["description"],
+            "name": data["name"],
+            "price": data["price"],
+            "stock": data["stock"],
+            "pack": data["pack"],
+            "locked": bool(data["locked"])
+        }
+    }), 201
