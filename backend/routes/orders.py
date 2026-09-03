@@ -32,10 +32,8 @@ def create_order(token):
         if user is None:
             return jsonify({"error": "Unauthorized"}), 401
 
-
         total = 0
         checked_items = []
-
 
         for item in items:
             item_id = str(item.get("id", ""))
@@ -47,49 +45,67 @@ def create_order(token):
 
             try:
                 quantity = int(quantity)
-            except:
+            except (TypeError, ValueError):
                 return jsonify({"error": "Invalid quantity"}), 400
-
 
             if quantity <= 0:
                 return jsonify({"error": "Invalid quantity"}), 400
 
-
             product = conn.execute(
                 """
-                SELECT id, name, price, stock
+                SELECT
+                    id,
+                    shop_id,
+                    name,
+                    price,
+                    stock,
+                    pack
                 FROM catalog
                 WHERE id = ?
                 """,
                 (item_id,)
             ).fetchone()
 
-
             if product is None:
                 return jsonify({"error": "Item not found"}), 404
 
+            if product["shop_id"] is None:
+                return jsonify({
+                    "error": "Item has no shop"
+                }), 500
 
-            if quantity > product["stock"]:
-                return jsonify({"error": "Not enough stock"}), 409
+            # quantity = quantité brute commandée
+            # pack = taille d'un pack
+            #
+            # Le prix du catalogue correspond à UN pack.
+            # On calcule donc le nombre de packs nécessaires.
+            pack = product["pack"]
 
+            packs = (quantity + pack - 1) // pack
 
-            cost = product["price"] * quantity
+            if packs * pack > product["stock"]:
+                return jsonify({
+                    "error": "Not enough stock"
+                }), 409
+
+            cost = product["price"] * packs
 
             total += cost
 
             checked_items.append({
                 "id": product["id"],
+                "shop_id": product["shop_id"],
                 "quantity": quantity,
+                "packs": packs,
                 "price": product["price"]
             })
 
-
         if total > user["balance"]:
-            return jsonify({"error": "Insufficient funds"}), 402
-
+            return jsonify({
+                "error": "Insufficient funds"
+            }), 402
 
         cursor = conn.cursor()
-
 
         cursor.execute(
             """
@@ -104,9 +120,7 @@ def create_order(token):
             )
         )
 
-
         order_id = cursor.lastrowid
-
 
         for item in checked_items:
 
@@ -124,7 +138,7 @@ def create_order(token):
                 )
             )
 
-
+            # Le stock est stocké en quantité brute.
             cursor.execute(
                 """
                 UPDATE catalog
@@ -132,11 +146,10 @@ def create_order(token):
                 WHERE id = ?
                 """,
                 (
-                    item["quantity"],
+                    item["packs"] * item["packs"],
                     item["id"]
                 )
             )
-
 
         cursor.execute(
             """
@@ -150,21 +163,17 @@ def create_order(token):
             )
         )
 
-
         conn.commit()
-
 
     except Exception as e:
         conn.rollback()
-        conn.close()
 
         return jsonify({
             "error": str(e)
         }), 500
 
-
-    conn.close()
-
+    finally:
+        conn.close()
 
     return jsonify({
         "ok": True,
@@ -178,39 +187,74 @@ def create_order(token):
 def get_orders(token):
     conn = get_db_connection()
 
+    try:
+        user = conn.execute(
+            """
+            SELECT id
+            FROM users
+            WHERE token = ?
+            """,
+            (token,)
+        ).fetchone()
 
-    user = conn.execute(
-        """
-        SELECT id
-        FROM users
-        WHERE token = ?
-        """,
-        (token,)
-    ).fetchone()
+        if user is None:
+            return jsonify({
+                "error": "Unauthorized"
+            }), 401
 
+        orders_result = conn.execute(
+            """
+            SELECT
+                orders.id,
+                users.home_address AS address
+            FROM orders
+            JOIN users
+                ON users.id = orders.user_id
+            WHERE orders.user_id = ?
+            ORDER BY orders.id DESC
+            """,
+            (user["id"],)
+        ).fetchall()
 
-    if user is None:
+        result = []
+
+        for order in orders_result:
+
+            items_result = conn.execute(
+                """
+                SELECT
+                    catalog.shop_id,
+                    order_items.item_id,
+                    order_items.quantity
+                FROM order_items
+                JOIN catalog
+                    ON catalog.id = order_items.item_id
+                WHERE order_items.order_id = ?
+                """,
+                (order["id"],)
+            ).fetchall()
+
+            items = []
+
+            for item in items_result:
+                items.append({
+                    "shopID": item["shop_id"],
+                    "itemID": item["item_id"],
+                    "qty": item["quantity"]
+                })
+
+            result.append({
+                "id": order["id"],
+                "address": order["address"],
+                "items": items
+            })
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+    finally:
         conn.close()
-        return jsonify({"error": "Unauthorized"}), 401
-
-
-    result = conn.execute(
-        """
-        SELECT id, total, notes, created_at
-        FROM orders
-        WHERE user_id = ?
-        ORDER BY id DESC
-        """,
-        (user["id"],)
-    ).fetchall()
-
-
-    conn.close()
-
-
-    return jsonify({
-        "orders": [
-            dict(order)
-            for order in result
-        ]
-    })
