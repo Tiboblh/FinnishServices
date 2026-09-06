@@ -17,11 +17,11 @@ Most authenticated routes require an `Authorization: Bearer <token>` header.
 
 The token is returned by `/api/register` and `/api/login`.
 
-Admin-only routes additionally require the authenticated user's `is_admin` value to be `true`.
+Admin-only routes require the authenticated user's `is_admin` value to be `true` / `1`.
 
 ---
 
-## User endpoints
+# User endpoints
 
 ### POST `/api/register`
 
@@ -136,7 +136,7 @@ X-USER-CHANGE: True
 Authorization: Bearer <token>
 ```
 
-Request body example:
+Request body:
 
 ```json
 {
@@ -158,20 +158,6 @@ Behavior:
 - `username` must be non-empty and unique
 - `homeaddress` / `home_address` must be non-empty
 - `use_public_frogports` is converted to `0` or `1`
-
-Success response `200`:
-
-```json
-{
-  "username": "alice2",
-  "homeaddress": "New address 42",
-  "use_public_frogports": true,
-  "balance": 0,
-  "token": "<token>",
-  "is_vendor": false,
-  "is_admin": false
-}
-```
 
 Possible errors:
 
@@ -392,9 +378,11 @@ then:
 
 means 64 cobblestone, which corresponds to 1 pack.
 
-The backend handles the pack calculation when determining the price.
+The backend calculates the required number of packs when determining the price.
 
-The stock is measured in raw items. Therefore, an order for `64` items removes `64` items from the catalog stock.
+The stock is measured in raw items.
+
+Therefore, an order for `64` items removes `64` items from the catalog stock.
 
 Success response `200`:
 
@@ -493,6 +481,184 @@ Possible errors:
 
 ---
 
+# Delivery endpoints
+
+The delivery API is used by the Minecraft/ComputerCraft delivery system.
+
+All `/api/deliver` requests require an authenticated admin account.
+
+Headers:
+
+```http
+Authorization: Bearer <admin-token>
+```
+
+The authenticated account must have:
+
+```text
+is_admin = 1
+```
+
+Normal users cannot access the delivery endpoint.
+
+---
+
+## GET `/api/deliver`
+
+Returns all orders that have not yet been marked as delivered.
+
+Only unsatisfied orders are returned.
+
+Success response `200`:
+
+```json
+[
+  {
+    "id": 24,
+    "address": "TestCust1",
+    "items": [
+      {
+        "itemID": "minecraft:cobblestone",
+        "quantity": 32
+      },
+      {
+        "itemID": "minecraft:dirt",
+        "quantity": 16
+      }
+    ]
+  },
+  {
+    "id": 25,
+    "address": "TestCust2",
+    "items": [
+      {
+        "itemID": "minecraft:stone",
+        "quantity": 64
+      }
+    ]
+  }
+]
+```
+
+Delivery item fields:
+
+| Field | Description |
+|---|---|
+| `itemID` | Catalog/Minecraft item ID |
+| `quantity` | Raw quantity that must be delivered |
+
+The delivery endpoint intentionally does not return:
+
+- `shopID`
+- shop information
+- vendor information
+- item price
+- pack size
+
+The delivery system only needs the item ID and quantity.
+
+Possible errors:
+
+- `401` unauthorized
+- `403` admin privileges required
+- `500` database error
+
+---
+
+## POST `/api/deliver`
+
+Marks orders as delivered/satisfied.
+
+Only admin accounts can use this endpoint.
+
+Headers:
+
+```http
+Authorization: Bearer <admin-token>
+Content-Type: application/json
+```
+
+Request body:
+
+```json
+{
+  "satisfied": [24, 25, 32]
+}
+```
+
+`satisfied` contains the IDs of orders that have been successfully delivered.
+
+Success response `200`:
+
+```json
+{
+  "satisfied": [24, 25, 32]
+}
+```
+
+Only orders that were previously unsatisfied are changed.
+
+Once an order is marked as delivered, it will no longer appear in:
+
+```text
+GET /api/deliver
+```
+
+Possible errors:
+
+- `400` invalid `satisfied` list
+- `401` unauthorized
+- `403` admin privileges required
+- `500` database error
+
+---
+
+# Admin endpoints
+
+## GET `/api/admin`
+
+Admin-only endpoint for reading information about another account.
+
+The authenticated account must have `is_admin = 1`.
+
+Headers:
+
+```http
+Authorization: Bearer <admin-token>
+accUsername: alice
+field: balance
+```
+
+Example response:
+
+```json
+{
+  "balance": 1000
+}
+```
+
+Allowed fields:
+
+- `id`
+- `username`
+- `home_address`
+- `public_frogports`
+- `balance`
+- `is_vendor`
+- `is_admin`
+
+Sensitive fields such as `password` and `token` cannot be requested.
+
+Possible errors:
+
+- `400` missing or invalid headers
+- `401` unauthorized
+- `403` admin privileges required
+- `404` account not found
+- `500` database error
+
+---
+
 # Database structure
 
 The database uses SQLite.
@@ -522,7 +688,6 @@ name
 Relationships:
 
 - `shops.user_id` references `users.id`
-- A user can own one or more shops
 - `shops.name` must be unique
 
 ## catalog
@@ -541,7 +706,6 @@ locked
 Relationships:
 
 - `catalog.shop_id` references `shops.id`
-- Each catalog item belongs to a shop
 
 ## orders
 
@@ -550,13 +714,18 @@ id
 user_id
 total
 notes
-created_at
 delivered
+created_at
 ```
 
 Relationships:
 
 - `orders.user_id` references `users.id`
+
+Delivery state:
+
+- `delivered = 0` — waiting for delivery
+- `delivered = 1` — delivered/satisfied
 
 ## order_items
 
@@ -573,7 +742,9 @@ Relationships:
 - `order_items.order_id` references `orders.id`
 - `order_items.item_id` references `catalog.id`
 
-Overall structure:
+---
+
+# Database relationships
 
 ```text
 users
@@ -585,6 +756,8 @@ users
   +-- orders
         |
         +-- order_items
+                |
+                +-- catalog
 ```
 
 ---
@@ -595,6 +768,8 @@ users
 - Authentication uses Bearer tokens returned by `/api/register` and `/api/login`.
 - `/api/catalog` requires authentication but does not require admin privileges.
 - `/api/change_catalog` requires authentication and admin privileges.
+- `/api/admin` requires authentication and admin privileges.
+- `/api/deliver` requires authentication and admin privileges.
 - Each catalog item belongs to a shop through `catalog.shop_id`.
 - Each shop belongs to a user through `shops.user_id`.
 - `catalog.price` represents the price of one pack.
@@ -602,5 +777,10 @@ users
 - `catalog.stock` represents the number of raw items currently available.
 - Order `qty` values represent raw item quantities, not pack counts.
 - `/api/orders` returns `shopID`, `itemID`, and raw `qty` for each ordered item.
+- `/api/deliver` returns only `itemID` and raw `quantity`.
+- `/api/deliver` only returns orders where `delivered = 0`.
+- POST `/api/deliver` marks successfully delivered orders with `delivered = 1`.
+- Delivered orders are not returned by subsequent GET `/api/deliver` requests.
 - The app uses SQLite.
-- Database initialization and migrations happen during backend bootstrap.
+- `database.py` contains the database schema and connection logic.
+- `update_db.py` creates missing tables and adds missing columns to existing databases.

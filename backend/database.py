@@ -1,208 +1,159 @@
 import sqlite3
+
 from config import DATABASE_PATH
 
 
-CURRENT_VERSION = 2
+SCHEMA = {
+    "users": {
+        "columns": {
+            "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+            "username": "TEXT NOT NULL UNIQUE",
+            "password": "TEXT NOT NULL",
+            "home_address": "TEXT NOT NULL",
+            "public_frogports": "INTEGER NOT NULL DEFAULT 0",
+            "balance": "INTEGER NOT NULL DEFAULT 0",
+            "token": "TEXT NOT NULL UNIQUE",
+            "is_vendor": "INTEGER NOT NULL DEFAULT 0",
+            "is_admin": "INTEGER NOT NULL DEFAULT 0",
+        },
+        "primary_key": "id",
+    },
+
+    "shops": {
+        "columns": {
+            "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+            "user_id": "INTEGER NOT NULL",
+            "name": "TEXT NOT NULL UNIQUE",
+        },
+        "primary_key": "id",
+    },
+
+    "catalog": {
+        "columns": {
+            "id": "TEXT PRIMARY KEY",
+            "shop_id": "INTEGER",
+            "name": "TEXT NOT NULL",
+            "description": "TEXT NOT NULL",
+            "price": "INTEGER NOT NULL CHECK(price >= 0)",
+            "stock": "INTEGER NOT NULL DEFAULT 0 CHECK(stock >= 0)",
+            "pack": "INTEGER NOT NULL DEFAULT 1 CHECK(pack >= 1)",
+            "locked": "INTEGER NOT NULL DEFAULT 0",
+        },
+        "primary_key": "id",
+    },
+
+    "orders": {
+        "columns": {
+            "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+            "user_id": "INTEGER NOT NULL",
+            "total": "INTEGER NOT NULL CHECK(total >= 0)",
+            "notes": "TEXT DEFAULT ''",
+            "delivered": "INTEGER NOT NULL DEFAULT 0",
+            "created_at": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        },
+        "primary_key": "id",
+    },
+
+    "order_items": {
+        "columns": {
+            "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+            "order_id": "INTEGER NOT NULL",
+            "item_id": "TEXT NOT NULL",
+            "quantity": "INTEGER NOT NULL CHECK(quantity > 0)",
+            "price": "INTEGER NOT NULL CHECK(price >= 0)",
+        },
+        "primary_key": "id",
+    },
+}
+
+
+FOREIGN_KEYS = {
+    "shops": [
+        "FOREIGN KEY(user_id) REFERENCES users(id)"
+    ],
+
+    "catalog": [
+        "FOREIGN KEY(shop_id) REFERENCES shops(id)"
+    ],
+
+    "orders": [
+        "FOREIGN KEY(user_id) REFERENCES users(id)"
+    ],
+
+    "order_items": [
+        "FOREIGN KEY(order_id) REFERENCES orders(id)",
+        "FOREIGN KEY(item_id) REFERENCES catalog(id)"
+    ],
+}
 
 
 def get_db_connection():
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
+
+    conn.execute("PRAGMA foreign_keys = ON")
+
     return conn
 
 
+def quote_identifier(identifier):
+    return '"' + identifier.replace('"', '""') + '"'
+
+
 def table_exists(conn, table_name):
-    return conn.execute(
+    row = conn.execute(
         """
         SELECT 1
         FROM sqlite_master
-        WHERE type = 'table' AND name = ?
+        WHERE type = 'table'
+        AND name = ?
         """,
         (table_name,)
-    ).fetchone() is not None
-
-
-def column_exists(conn, table_name, column_name):
-    columns = conn.execute(
-        f'PRAGMA table_info("{table_name}")'
-    ).fetchall()
-
-    return any(column["name"] == column_name for column in columns)
-
-
-def get_db_version(conn):
-    row = conn.execute(
-        "PRAGMA user_version"
     ).fetchone()
 
-    return row[0]
+    return row is not None
 
 
-def set_db_version(conn, version):
-    conn.execute(f"PRAGMA user_version = {version}")
+def create_table(conn, table_name):
+    definition = SCHEMA[table_name]
 
+    columns = []
 
-def migration_v2(conn):
-    """
-    Migration vers la DB v2.
-
-    Ajoute :
-        - shops
-        - catalog.shop_id
-    """
-
-    print("[*] Running migration v2...")
-
-    # ---------------------------------------------------------
-    # 1. Create shops table
-    # ---------------------------------------------------------
-
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS shops (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        name TEXT NOT NULL UNIQUE,
-        FOREIGN KEY(user_id) REFERENCES users(id)
-    )
-    """)
-
-    # ---------------------------------------------------------
-    # 2. Add shop_id to catalog
-    # ---------------------------------------------------------
-
-    if not column_exists(conn, "catalog", "shop_id"):
-
-        print("[+] Adding catalog.shop_id")
-
-        # SQLite ne permet pas facilement d'ajouter directement
-        # une colonne NOT NULL sans DEFAULT.
-        #
-        # On l'ajoute donc temporairement nullable.
-
-        conn.execute("""
-        ALTER TABLE catalog
-        ADD COLUMN shop_id INTEGER
-        """)
-
-    # ---------------------------------------------------------
-    # 3. Create a migration shop for old catalog items
-    # ---------------------------------------------------------
-
-    # On cherche un utilisateur vendeur.
-    vendor = conn.execute("""
-        SELECT id
-        FROM users
-        WHERE is_vendor = 1
-        ORDER BY id
-        LIMIT 1
-    """).fetchone()
-
-    if vendor is None:
-
-        # Si aucun vendeur n'existe, on prend le premier utilisateur.
-        vendor = conn.execute("""
-            SELECT id
-            FROM users
-            ORDER BY id
-            LIMIT 1
-        """).fetchone()
-
-    if vendor is not None:
-
-        shop = conn.execute("""
-            SELECT id
-            FROM shops
-            WHERE user_id = ?
-            ORDER BY id
-            LIMIT 1
-        """, (vendor["id"],)).fetchone()
-
-        if shop is None:
-
-            cursor = conn.execute("""
-                INSERT INTO shops (user_id, name)
-                VALUES (?, ?)
-            """, (
-                vendor["id"],
-                "Migrated Shop"
-            ))
-
-            shop_id = cursor.lastrowid
-
-            print(
-                f"[+] Created migration shop #{shop_id}"
-            )
-
-        else:
-            shop_id = shop["id"]
-
-        # -----------------------------------------------------
-        # 4. Associate old catalog items with this shop
-        # -----------------------------------------------------
-
-        updated = conn.execute("""
-            UPDATE catalog
-            SET shop_id = ?
-            WHERE shop_id IS NULL
-        """, (shop_id,))
-
-        print(
-            f"[+] Assigned {updated.rowcount} old catalog items "
-            f"to shop #{shop_id}"
+    for column_name, column_type in definition["columns"].items():
+        columns.append(
+            f"{quote_identifier(column_name)} {column_type}"
         )
 
-    else:
-        print(
-            "[!] No users exist. Old catalog items will remain "
-            "without a shop until a shop is created."
+    for foreign_key in FOREIGN_KEYS.get(table_name, []):
+        columns.append(foreign_key)
+
+    sql = f"""
+        CREATE TABLE IF NOT EXISTS {quote_identifier(table_name)}
+        (
+            {", ".join(columns)}
         )
+    """
 
-    print("[+] Migration v2 completed.")
+    conn.execute(sql)
 
 
-def migrate_database():
+def init_database():
     conn = get_db_connection()
 
     try:
-        conn.execute("PRAGMA foreign_keys = OFF")
+        # L'ordre est important pour les foreign keys.
+        create_table(conn, "users")
+        create_table(conn, "shops")
+        create_table(conn, "catalog")
+        create_table(conn, "orders")
+        create_table(conn, "order_items")
 
-        version = get_db_version(conn)
-
-        print(f"[*] Database version: {version}")
-        print(f"[*] Current version: {CURRENT_VERSION}")
-
-        # -----------------------------------------------------
-        # v0/v1 -> v2
-        # -----------------------------------------------------
-
-        if version < 2:
-
-            migration_v2(conn)
-
-            set_db_version(conn, 2)
-
-            conn.commit()
-
-        elif version == CURRENT_VERSION:
-
-            print("[+] Database already up to date.")
-
-        else:
-
-            raise RuntimeError(
-                f"Database version {version} is newer than "
-                f"supported version {CURRENT_VERSION}"
-            )
-
-    except Exception:
-        conn.rollback()
-        print("[!] Database migration failed.")
-        raise
+        conn.commit()
 
     finally:
-        conn.execute("PRAGMA foreign_keys = ON")
         conn.close()
 
 
 if __name__ == "__main__":
-    migrate_database()
+    init_database()
+    print("Database initialized.")
