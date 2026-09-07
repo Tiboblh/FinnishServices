@@ -1,47 +1,10 @@
 from flask import Blueprint, request, jsonify
 
 from database import get_db_connection
-from auth import auth_required
+from auth import auth_required, admin_required
 
 
 orders = Blueprint("orders", __name__)
-
-
-def get_authenticated_user(conn, token):
-    return conn.execute(
-        """
-        SELECT
-            id,
-            username,
-            balance,
-            is_admin
-        FROM users
-        WHERE token = ?
-        """,
-        (token,)
-    ).fetchone()
-
-
-def require_admin(conn, token):
-    user = get_authenticated_user(conn, token)
-
-    if user is None:
-        return None, (
-            jsonify({
-                "error": "Unauthorized"
-            }),
-            401
-        )
-
-    if not user["is_admin"]:
-        return None, (
-            jsonify({
-                "error": "Admin required"
-            }),
-            403
-        )
-
-    return user, None
 
 
 @orders.route("/api/order", methods=["POST"])
@@ -334,18 +297,11 @@ def get_orders(token):
 
 
 @orders.route("/api/deliver", methods=["GET"])
-@auth_required
+@admin_required
 def get_delivery_orders(token):
     conn = get_db_connection()
 
     try:
-        user, error = require_admin(
-            conn,
-            token
-        )
-
-        if error:
-            return error
 
         orders_result = conn.execute(
             """
@@ -402,7 +358,7 @@ def get_delivery_orders(token):
 
 
 @orders.route("/api/deliver", methods=["POST"])
-@auth_required
+@admin_required
 def satisfy_delivery_orders(token):
     data = request.get_json(silent=True) or {}
 
@@ -479,18 +435,11 @@ def satisfy_delivery_orders(token):
 
 
 @orders.route("/api/admin", methods=["GET"])
-@auth_required
+@admin_required
 def admin_get(token):
     conn = get_db_connection()
 
     try:
-        user, error = require_admin(
-            conn,
-            token
-        )
-
-        if error:
-            return error
 
         username = request.headers.get("accUsername")
         field = request.headers.get("field")
@@ -500,7 +449,6 @@ def admin_get(token):
                 "error": "Missing accUsername or field"
             }), 400
 
-        # On ne permet pas d'interroger password/token.
         allowed_fields = {
             "id",
             "username",
