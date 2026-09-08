@@ -1,8 +1,3 @@
--- Show "Sustingus shop" as a main menu that can be used to navigate to other menus via pressing the key corresponding to an option.
--- for [ username ]/[ password ] style boxes use text input then the listed controls under register to navigate those boxes, with the y/n box under register only taking either y/n for true/false
--- once logged in, switch to ordering screen, save "login.sav" in current dir with saved credentials such that the user does not have to log in again when using the software.
--- Variables of username, pass, home mail address, should be saved as strings in login.sav, with public frogports being saved as a boolean 
--- anything in {} are where certain vars should be shown, and () are instructions on what something should do
  -<Sustingus Shop (main window, dont include this text in actual builds)>-
   [L] Login {go to login page}
   [R] Register

@@ -1,0 +1,67 @@
+[Catalog] [Shops] [Cart (0)] -- the (num) is number of unique items in cart (eg, 3 even if there is 52 dirt, 32 cobble, 4 iron)
+  Cobblestone
+   3c 32s / 16 [0] -- price / (per) pack [numInCart (this would be 32 if 2 packs were in cart and pack was 16)]
+  testItem2
+   4c 16s / 2 [0]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Page 1/1 funds 8264c 16s
+
+(shops)
+
+[Catalog] [Shops] [Cart (0)]
+ [1]: Lua Shop
+ [2]: Test Shop 2
+ [3]: lemon sandwic
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Press number to select a shop
+
+(cart)
+
+[Catalog] [Shops] [Cart (5)] -- now with placeholder items!
+ Cobblestone x 59
+ TestItem3 x 32
+ etc, etc
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Press LCtrl to remove an item

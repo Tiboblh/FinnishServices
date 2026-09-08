@@ -5,189 +5,18 @@
 -- importing the sha256 thing
 local sha256 = require("ccryptolib.sha256")
 -- var setup
+local clientVersion = 0.1 -- left side is major ver, 0 since still dev/beta, right side is patch, i start it at 1 since this is patch that adds in verision
+local protocolVersion = 0.1 -- same idea as version
 local loggedIn = false --init
 local savePath = "/luashop/login.sav" -- if you want, change this, but its recomended to leave dis alone 
-local username = ""
+local username = "" -- `username == token is in fact true, bc this is just init`
 local token = "" -- init, no change ples
-local serveraddr = "localhost:9142" -- server to contact for account and ordering, leave this alone.
+local serveraddr = "http://vps-2ddc970b.vps.ovh.net:9142" -- server to contact for account and ordering, leave this alone.
 local funds = 0 --init
 local userData = {}
 local cartContents = {}
 local pocket = false
-local offline = false -- leave this off, its for development when internet isnt available
-local catalogContents_ = { -- this is testing stuff, will be set to empty for init later on, or just renamed idk
-    { -- dirt
-        id="minecraft:dirt", -- ID of item, for requesting internally
-        name="Dirt", --actual name of item, displayed to user (MUST BE 16 CHARS OR LESS (12 or less for cart display))
-        price=(1*64), -- price in spurs, the (0*64) block is added for cogs too to make easier
-        description="brown substance from the earth", -- description of the item, might be displayed later?
-        stock=272, -- ammount of stock available, if less than pack size it cannot be purchased.
-        pack=16, --ammount purchased at a time, cannot be purchased in smaller increments
-        locked=false -- determine if this item should be in catalog, but not returned to client (locked)
-    },
-    { -- cobblestone
-        id="minecraft:cobblestone",
-        name="Cobblestone",
-        price=(2*64), -- 2 cogs, 0 spurs
-        description="not tasty rocks, also from the earth.",
-        stock=389,
-        pack=32,
-        locked=false
-    },
-    { -- iron ingot
-        id="minecraft:iron_ingot",
-        name="Iron Ingot",
-        price=(2*64), -- 2 cogs, 0 spurs
-        description="metal object of some kind",
-        stock=131,
-        pack=8,
-        locked=false
-    },
-    { -- gold ingot
-        id="minecraft:gold_ingot",
-        name="Gold Ingot",
-        price=(4*64), -- 4 cogs, 0 spurs
-        description="mm butter",
-        stock=42,
-        pack=4,
-        locked=false
-    },
-    { -- diamond
-        id="minecraft:diamond",
-        name="Diamond",
-        price=(8*64), -- 8 cogs, 0 spurs
-        description="veri shinyier rock",
-        stock=12,
-        pack=1,
-        locked=false
-    },
-    { -- emerald
-        id="minecraft:emerald",
-        name="Emerald",
-        price=(16*64), -- 16 cogs, 0 spurs
-        description="green rock, villager liek",
-        stock=12,
-        pack=2,
-        locked=false
-    },
-    { -- netherite ingot
-        id="minecraft:netherite_ingot",
-        name="Netherite Ingot",
-        price=(32*64), -- 32 cogs, 0 spurs
-        description="burnt butter",
-        stock=3,
-        pack=1,
-        locked=false
-    },
-    { -- redstone
-        id="minecraft:redstone",
-        name="Redstone",
-        price=(1*64), -- 1 cogs, 0 spurs
-        description="red rock, makes things go",
-        stock=128,
-        pack=16,
-        locked=false
-    },
-    { -- lapis lazuli
-        id="minecraft:lapis_lazuli",
-        name="Lapis Lazuli",
-        price=(2*64), -- 2 cogs, 0 spurs
-        description="blue rock, makes enchant go",
-        stock=64,
-        pack=8,
-        locked=false
-    },
-    { -- andesite casing
-        id="create:andesite_casing",
-        name="Andesite Casing",
-        price=(1*64), -- 1 cogs, 0 spurs
-        description="used to encase things",
-        stock=64,
-        pack=8,
-        locked=false
-    },
-    { -- brass casing
-        id="create:brass_casing",
-        name="Brass Casing",
-        price=(2*64), -- 2 cogs, 0 spurs
-        description="used to encase things but shinyer",
-        stock=32,
-        pack=4,
-        locked=false
-    },
-    { -- copper casing
-        id="create:copper_casing",
-        name="Copper Casing",
-        price=(1*64), -- 1 cogs, 0 spurs
-        description="used to encase things",
-        stock=64,
-        pack=8,
-        locked=false
-    },
-    { -- steak
-        id="minecraft:cooked_beef",
-        name="Steak",
-        price=(1*64), -- 1 cogs, 0 spurs
-        description="8 burger",
-        stock=64,
-        pack=8,
-        locked=false
-    },
-    { -- bread
-        id="minecraft:bread",
-        name="Bread",
-        price=(1*64), -- 1 cogs, 0 spurs
-        description="4 burger",
-        stock=64,
-        pack=8,
-        locked=false
-    },
-    { -- cake
-        id="minecraft:cake",
-        name="Cake",
-        price=(2*64), -- 2 cogs, 0 spurs
-        description="8 burger",
-        stock=32,
-        pack=4,
-        locked=false
-    },
-    { -- cookie
-        id="minecraft:cookie",
-        name="Cookie",
-        price=(1*64), -- 1 cogs, 0 spurs
-        description="1 burger",
-        stock=128,
-        pack=16,
-        locked=false
-    },
-    { -- golden apple
-        id="minecraft:golden_apple",
-        name="Gapple",
-        price=(8*64), -- 8 cogs, 0 spurs
-        description="8 burger, but shiny",
-        stock=16,
-        pack=2,
-        locked=false
-    },
-    { -- enchanted golden apple
-        id="minecraft:enchanted_golden_apple",
-        name="E. Gapple",
-        price=(32*64), -- 32 cogs, 0 spurs
-        description="32 burger, but shinyer",
-        stock=4,
-        pack=1,
-        locked=false
-    },
-    { -- wrench
-        id="create:wrench",
-        name="Create Wrench",
-        price=(4*64), -- 4 cogs, 0 spurs
-        description="used to wrench things",
-        stock=16,
-        pack=1,
-        locked=false
-    }
-} 
+local offline = false -- leave this off, its for development when internet isnt available (and is prob broken lmao)
 local catalogContents = {}
 
 -- string sets, easier to modify like this
@@ -220,8 +49,8 @@ local menuAssets = {
             " -<Options (" .. tostring(username) ..")>-",
             "  [U] Change Username",
             "  [P] Change Password",
-            "  [A] Change Address",
-            "  [F] Toggle Public frogports ( currently " .. tostring(userData["use_public_frogports"]) .. ")",
+            "  [A] Change Address ( currently " .. tostring(userData["address"]).. " )",
+            "  [F] Toggle Public frogports ( currently " .. tostring(userData["use_public_frogports"]) .. " )",
             "  [B] Back"
         }
     }
@@ -246,10 +75,10 @@ local optionsFuncs = {
     end,
     changeAddress = function ()
         clearScreen() -- this should give a text prompt that requests a new address, sends it to server to update
-        print("-<Username Change>-")
-        io.write("New Username: ")
-        local newuser = read()
-        contactServer("modify_user", {username = newuser})
+        print("-<Address Change>-")
+        io.write("New Address: ")
+        local newaddr = read()
+        contactServer("modify_user", {homeaddress = newaddr})
         main()
     end,
     togglePubFrogports = function ()
@@ -258,7 +87,7 @@ local optionsFuncs = {
         contactServer("modify_user", {use_public_frogports = not userData["use_public_frogports"]})
         userData = contactServer("user_info")
         main()
-    end
+    end,
 }
 
 local menuActions = {
@@ -274,7 +103,8 @@ local menuActions = {
     ["changeUsername"] = function() return optionsFuncs.changeUsername() end,
     ["changePassword"] = function() return optionsFuncs.changePassword() end,
     ["changeAddress"] = function() return optionsFuncs.changeAddress() end,
-    ["togglePubFrogports"] = function() return optionsFuncs.togglePubFrogports() end
+    ["togglePubFrogports"] = function() return optionsFuncs.togglePubFrogports() end,
+    ["getOrderHistory"] = function() return optionsFuncs.getOrderHistory() end
 }
 
 function waitForEnter()
@@ -352,11 +182,7 @@ function contactServer(mode, data)
         local response = http.post(url, textutils.serialiseJSON(payload), headers)
         clearScreen()
         if response then
-            -- The HTTP response object is not the actual JSON payload; unwrap it first.
             local body = response.readAll and response.readAll() or response
-            if type(body) == "string" and body:sub(1, 7) == "return " then
-                body = body:sub(8)
-            end
             local parsed = textutils.unserializeJSON(body)
             if type(parsed) == "table" then
                 return parsed
@@ -500,39 +326,59 @@ function contactServer(mode, data)
     elseif mode == "checkout" then
         if not data then error("No cart provided for order.") end
         local url = serveraddr .. "/api/order"
-        local headers = {["Content-Type"] = "application/json"}
-        local payload = {items={},notes="this message should not be shown, it should be replaced by user input"}
+        local headers = {["Content-Type"] = "application/json", ["Authorization"] = "Bearer " .. token}
+        local payload = {items={},notes=""}
         local cart = data
         clearScreen()
-        io.write(" Please input a note for the order.")
-        term.setCursorPos(2,2)
+        io.write(" Please input a note for the order. (none is okay too!)")
+        term.setCursorPos(2,3)
+        io.write("notes: ")
         payload.notes = read()
         clearScreen()
-        for _, t in ipairs(cart) do
-            local it = {id=t.id, qty=t.count}
+        for _, t, i in ipairs(cart) do
+            local it = {id = t.id, qty = t.count}
             table.insert(payload.items, it)
         end
         print("contacting server (checkout)...")
-        print(textutils.serialiseJSON(payload))
-        waitForEnter()
         local response = http.post(url, textutils.serialiseJSON(payload), headers)
         clearScreen()
         if not response then
             print("Error: Failed to connect to server, no valid response.")
+            debug.debug()
         else
             local contents = response.readAll()
             local responsedata = textutils.unserialiseJSON(contents)
             if responsedata then
-                print("Order ID: " .. tostring(responsedata.orderid))
-                print("Total: " .. tostring(responsedata.total))
-                print("Note: " .. tostring(responsedata.notes))
+                main()
             else
                 print("Error: Invalid response from server")
             end
         end
-        waitForEnter()
-    end
+    elseif mode == "getOrders" then
+        local url = serveraddr .. "/api/orders"
+        local headers = {["Content-Type"] = "application/json", ["Authorization"] = "Bearer " .. token}
+        clearScreen()
+        print("Contacting server (get order history)...")
+        local response = http.get(url, headers)
+        local result
 
+        if response then
+            local body = response.readAll()
+            response.close()
+            result = textutils.unserialiseJSON(body)
+            if result then
+                return result
+            else
+                return body
+            end
+        else
+            error("Failed to connect to server, no valid response.", 2)
+        end
+
+        waitForEnter()
+        clearScreen()
+        return result
+    end
 end
 
 function renderMenu(menuName)
@@ -560,6 +406,8 @@ function renderMenu(menuName)
 
     if menuName == "options" then
         menu.text[5] = "  [F] Toggle Public frogports ( currently " .. tostring(userData["use_public_frogports"]) .. " )"
+        menu.text[6] = "  [H] Order History"
+        menu.text[7] = "  [B] Back"
     end
 
     clearScreen()
@@ -627,7 +475,7 @@ function login()
     local serverResponse = contactServer("login", payload)
     username = username_input
     loggedIn = true
-    token = serverResponse.token
+    token = serverResponse["token"]
     if token == nil then
         loggedIn = false
         username = ""
@@ -638,7 +486,6 @@ function login()
         exit()
     end
     saveToken()
-    print(serverResponse)
     print(token)
     
     waitForEnter()
@@ -710,7 +557,7 @@ function main() -- yep, main is THIS simple
     end
 end
 
-function catalog() -- all this does is decide which catalog to load
+function catalog() -- all this does is decide which catalog to load bc i aint repeating this check everywhere (am lazy)
     if pocket then mobileCatalog() else desktopCatalog() end
 end
 
@@ -1435,15 +1282,14 @@ function initLogin()
             loggedIn = true
             initLoginDone = true
         elseif serverResponse == nil then
-           error("server didn't respond with anything. your internet just sucks most likely",2) 
+           error("server didn't respond with anything.",2) 
         end
-
     end
     end
 end
 
 -- program start
-local termX, termY = term.getSize()
+local termX, termY = term.getSize() -- check if pocket computer, for now just error out if so a bit further down
 if termX == 30 then
     pocket = true
 end
@@ -1454,9 +1300,15 @@ if not offline then
         sleep(1.5)
         exit()
     end
-    local initLoginDone = false
     clearScreen() -- clear screen before we do anything
     initLogin()
+    if not fs.exists(savePath) then
+        local file = fs.open(savePath, "w")
+        if file then
+            file.write("")
+            file.close()
+        end 
+    end
     main()
     clearScreen()
 else
@@ -1466,7 +1318,7 @@ else
         sleep(1.5)
         exit()
     end
-    username = "offlineUser"; funds = 5923; loggedIn = true -- set dummy vars
+    username = "offlineUser"; funds = 5923; loggedIn = true -- set dummy vars, ONLY FOR DEV-ING
     clearScreen()
     main()
     clearScreen()
