@@ -370,16 +370,6 @@ def satisfy_delivery_orders(token):
         }), 400
 
     conn = get_db_connection()
-
-    try:
-        user, error = admin_required(
-            conn,
-            token
-        )
-
-        if error:
-            return error
-
         order_ids = []
 
         for order_id in satisfied:
