@@ -370,22 +370,22 @@ def satisfy_delivery_orders(token):
         }), 400
 
     conn = get_db_connection()
-        order_ids = []
+    order_ids = []
 
-        for order_id in satisfied:
-            try:
-                order_id = int(order_id)
-            except (TypeError, ValueError):
-                return jsonify({
+    for order_id in satisfied:
+        try:
+            order_id = int(order_id)
+        except (TypeError, ValueError):
+            return jsonify({
+                "error": "Invalid order ID"
+            }), 400
+
+        if order_id <= 0:
+            return jsonify({
                     "error": "Invalid order ID"
-                }), 400
+            }), 400
 
-            if order_id <= 0:
-                return jsonify({
-                    "error": "Invalid order ID"
-                }), 400
-
-            order_ids.append(order_id)
+        order_ids.append(order_id)
 
         # Évite les doublons.
         order_ids = list(dict.fromkeys(order_ids))
