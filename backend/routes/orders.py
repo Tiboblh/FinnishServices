@@ -372,7 +372,7 @@ def satisfy_delivery_orders(token):
     conn = get_db_connection()
 
     try:
-        user, error = require_admin(
+        user, error = admin_required(
             conn,
             token
         )
