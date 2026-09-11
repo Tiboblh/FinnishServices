@@ -1,4 +1,4 @@
--- local ticker = peripheral.find("Create_StockTicker")
+local ticker = peripheral.find("Create_StockTicker")
 local orders = {}
 do -- get orders from server
     url = "http://vps-2ddc970b.vps.ovh.net:9142/api/deliver"

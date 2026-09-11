@@ -1,9 +1,133 @@
 ---@diagnostic disable: need-check-nil
 -- lua Shop Client
---  Please dont modify this, its a mess of spaghetti code.
+--  evil thing by tibo and mudkip
 
--- importing the sha256 thing
-local sha256 = require("ccryptolib.sha256")
+local sha256 = {}
+
+local function ror(value, bits)
+    return bit32.rrotate(value, bits)
+end
+
+local K = {
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+    0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+    0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+    0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
+    0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
+    0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+}
+
+local function sha256_digest(data)
+    local msg = {string.byte(data or "", 1, #data)}
+    msg[#msg + 1] = 0x80
+    while (#msg % 64) ~= 56 do
+        msg[#msg + 1] = 0x00
+    end
+
+    local bitlen = (#data or 0) * 8
+    local bitlen_hi = math.floor(bitlen / 4294967296)
+    local bitlen_lo = bitlen % 4294967296
+
+    for i = 7, 0, -1 do
+        msg[#msg + 1] = bit32.rshift((bitlen_hi or 0), i * 8) % 256
+    end
+    for i = 7, 0, -1 do
+        msg[#msg + 1] = bit32.rshift(bitlen_lo, i * 8) % 256
+    end
+
+    local words = {}
+    for i = 1, #msg, 4 do
+        local a = msg[i] or 0
+        local b = msg[i + 1] or 0
+        local c = msg[i + 2] or 0
+        local d = msg[i + 3] or 0
+        words[#words + 1] = (a * 16777216) + (b * 65536) + (c * 256) + d
+    end
+
+    local h0 = 0x6a09e667
+    local h1 = 0xbb67ae85
+    local h2 = 0x3c6ef372
+    local h3 = 0xa54ff53a
+    local h4 = 0x510e527f
+    local h5 = 0x9b05688c
+    local h6 = 0x1f83d9ab
+    local h7 = 0x5be0cd19
+
+    for chunk = 1, #words, 16 do
+        local w = {}
+        for i = 0, 15 do
+            w[i + 1] = words[chunk + i] or 0
+        end
+
+        for i = 17, 64 do
+            local s0 = bit32.bxor(bit32.bxor(ror(w[i - 15], 7), ror(w[i - 15], 18)), bit32.rshift(w[i - 15], 3))
+            local s1 = bit32.bxor(bit32.bxor(ror(w[i - 2], 17), ror(w[i - 2], 19)), bit32.rshift(w[i - 2], 10))
+            w[i] = (w[i - 16] + s0 + w[i - 7] + s1) % 4294967296
+        end
+
+        local a, b, c, d, e, f, g, h = h0, h1, h2, h3, h4, h5, h6, h7
+        for i = 1, 64 do
+            local S1 = bit32.bxor(bit32.bxor(ror(e, 6), ror(e, 11)), ror(e, 25))
+            local ch = bit32.bxor(bit32.band(e, f), bit32.band(bit32.bnot(e), g))
+            local temp1 = (h + S1 + ch + K[i] + w[i]) % 4294967296
+            local S0 = bit32.bxor(bit32.bxor(ror(a, 2), ror(a, 13)), ror(a, 22))
+            local maj = bit32.bxor(bit32.bxor(bit32.band(a, b), bit32.band(a, c)), bit32.band(b, c))
+            local temp2 = (S0 + maj) % 4294967296
+
+            h = g
+            g = f
+            f = e
+            e = (d + temp1) % 4294967296
+            d = c
+            c = b
+            b = a
+            a = (temp1 + temp2) % 4294967296
+        end
+
+        h0 = (h0 + a) % 4294967296
+        h1 = (h1 + b) % 4294967296
+        h2 = (h2 + c) % 4294967296
+        h3 = (h3 + d) % 4294967296
+        h4 = (h4 + e) % 4294967296
+        h5 = (h5 + f) % 4294967296
+        h6 = (h6 + g) % 4294967296
+        h7 = (h7 + h) % 4294967296
+    end
+
+    local function emit32(value)
+        return string.char(
+            bit32.rshift(value, 24) % 256,
+            bit32.rshift(value, 16) % 256,
+            bit32.rshift(value, 8) % 256,
+            value % 256
+        )
+    end
+
+    return emit32(h0) .. emit32(h1) .. emit32(h2) .. emit32(h3) .. emit32(h4) .. emit32(h5) .. emit32(h6) .. emit32(h7)
+end
+
+sha256.digest = sha256_digest
+sha256.sha256 = sha256_digest
+sha256.hash = sha256_digest
+sha256.hexdigest = function(data)
+    local bytes = sha256_digest(data)
+    local hex = {}
+    for i = 1, #bytes do
+        hex[#hex + 1] = string.format("%02x", string.byte(bytes, i, i))
+    end
+    return table.concat(hex)
+end
+
 -- var setup
 local clientVersion = 0.1 -- left side is major ver, 0 since still dev/beta, right side is patch, i start it at 1 since this is patch that adds in verision
 local protocolVersion = 0.1 -- same idea as version
@@ -22,14 +146,14 @@ local catalogContents = {}
 -- string sets, easier to modify like this
 local menuAssets = {
     MainMenu = {
-        keybinds = {{"L", "login"}, {"R", "register"}, {"E", "sleep(0.1); return 0"}},
+        keybinds = {{"L", "login"}, {"R", "register"}, {"E", "exit"}},
         text = {" -<lua Shop Client (No User)>-",
                 "  [L] Login",
                 "  [R] Register",
                 "  [E] Exit"}
     },
     loggedInMenu = {
-        keybinds = {{"C", "catalog"}, {"O","options"}, {"L", "logout"}, {"E", "sleep(0.1); return 0"}},
+        keybinds = {{"C", "catalog"}, {"O","options"}, {"L", "logout"}, {"E", "exit"}},
         text = {" -<lua Shop Client (" .. tostring(username) .. ")>-",
                 "  [C] Catalog", 
                 "  [O] Options",
@@ -49,12 +173,18 @@ local menuAssets = {
             " -<Options (" .. tostring(username) ..")>-",
             "  [U] Change Username",
             "  [P] Change Password",
-            "  [A] Change Address ( currently " .. tostring(userData["address"]).. " )",
+            "  [A] Change Address",
             "  [F] Toggle Public frogports ( currently " .. tostring(userData["use_public_frogports"]) .. " )",
             "  [B] Back"
         }
     }
 }
+
+runOptions = function ()
+        clearScreen()
+        userData = contactServer("user_info")
+        renderMenu("options")
+    end
 
 local optionsFuncs = {
     changeUsername = function ()
@@ -63,7 +193,7 @@ local optionsFuncs = {
         io.write("New Username: ")
         local newuser = read()
         contactServer("modify_user", {username = newuser})
-        main()
+        runOptions()
     end,
     changePassword = function ()
         clearScreen() -- same as change user func but for password
@@ -71,7 +201,7 @@ local optionsFuncs = {
         io.write("New Password: ")
         local newpass = read("*")
         contactServer("modify_user", {password = str2hexa(sha256.digest(newpass))})
-        main()
+        runOptions()
     end,
     changeAddress = function ()
         clearScreen() -- this should give a text prompt that requests a new address, sends it to server to update
@@ -79,14 +209,14 @@ local optionsFuncs = {
         io.write("New Address: ")
         local newaddr = read()
         contactServer("modify_user", {homeaddress = newaddr})
-        main()
+        runOptions()
     end,
     togglePubFrogports = function ()
         clearScreen() -- this function should send a reqeust to the server to toggle Public Frogports, and then reload the options menu
         userData = contactServer("user_info")
         contactServer("modify_user", {use_public_frogports = not userData["use_public_frogports"]})
         userData = contactServer("user_info")
-        main()
+        runOptions()
     end,
 }
 
@@ -99,12 +229,13 @@ local menuActions = {
     ["confirmLogout"] = function() return true end,
     ["MainMenu"] = function() return renderMenu("MainMenu") end,
     ["loggedInMenu"] = function() return renderMenu("loggedInMenu") end,
-    ["options"] = function() return renderMenu("options") end,
+    ["options"] = function() return runOptions() end,
     ["changeUsername"] = function() return optionsFuncs.changeUsername() end,
     ["changePassword"] = function() return optionsFuncs.changePassword() end,
     ["changeAddress"] = function() return optionsFuncs.changeAddress() end,
     ["togglePubFrogports"] = function() return optionsFuncs.togglePubFrogports() end,
-    ["getOrderHistory"] = function() return optionsFuncs.getOrderHistory() end
+    ["getOrderHistory"] = function() return optionsFuncs.getOrderHistory() end,
+    ["exit"] = function() return exit() end
 }
 
 function waitForEnter()
@@ -204,12 +335,35 @@ function contactServer(mode, data)
         local response = http.post(url, textutils.serialiseJSON(payload), headers)
         clearScreen()
         if response then
-            local body = response
-            if type(body) == "string" and body:sub(1, 7) == "return " then
-                body = body:sub(8)
+            local body = response.readAll()
+            response.close()
+
+            if type(body) == "string" then
+                body = body:match("^%s*(.-)%s*$")
+                if body:sub(1, 7) == "return " then
+                    body = body:sub(8)
+                end
+
+                local ok, parsed = pcall(function()
+                    local compile = loadstring or load
+                    local fn = compile("return " .. body)
+                    if fn then
+                        return fn()
+                    end
+                    return nil
+                end)
+                if ok and type(parsed) == "table" then
+                    return parsed
+                end
+
+                local jsonParsed = textutils.unserializeJSON(body)
+                if type(jsonParsed) == "table" then
+                    return jsonParsed
+                end
             end
+
             if type(body) == "table" then
-                return body.readAll()
+                return body
             end
         end
         error("The server did not respond. perhaps you input an already taken username?")
@@ -480,15 +634,12 @@ function login()
         loggedIn = false
         username = ""
         clearScreen()
-        print("Token is nil for some reason; uh")
-        print("go exit yes press enter")
+        print("Token is nil for some reason when tryna login; uh")
+        print("go exit yes press enter") -- maybe i SHOULDNT have smth this stupidly worded, but i aint gonna change it -mudkip
         waitForEnter()
         exit()
     end
     saveToken()
-    print(token)
-    
-    waitForEnter()
     main()
 end
 
@@ -539,9 +690,9 @@ function register()
         use_public_frogports = public_frogport_input
     }
     local response = contactServer("register", payload)
-    username = username_input
-    funds = 0
-    token = serverResponse["token"]
+    username = response["username"] or username_input
+    funds = response["balance"] or 0
+    token = response["token"] or error("server gave no token after registre, account was created though? (try loggin in seperately)",2)
     loggedIn = true
     saveToken()
     main()
@@ -1310,6 +1461,7 @@ if not offline then
         end 
     end
     main()
+    waitForEnter()
     clearScreen()
 else
     if pocket then
