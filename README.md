@@ -213,11 +213,19 @@ Example:
 Returns all catalog items.
 
 Requires a valid authenticated user token. Admin privileges are not required.
+If a shop_id value is given, it will give the items only from this shop.
 
 Headers:
 
 ```http
 Authorization: Bearer <token>
+```
+Example:
+
+```json
+{
+  "shop_id": 1
+}
 ```
 
 Success response `200`:

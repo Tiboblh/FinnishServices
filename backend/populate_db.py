@@ -6,19 +6,22 @@ CATALOG = [
         "id": "minecraft:dirt",
         "name": "Dirt",
         "price": 25,
-        "stock": 10
+        "stock": 10,
+        "description": "la dirt from la thing"
     },
     {
         "id": "minecraft:redstone",
         "name": "Redstone",
         "price": 8,
-        "stock": 100
+        "stock": 100,
+        "description": "energy in la minecraft"
     },
     {
         "id": "create:package_frogport",
         "name": "Package Frogport",
         "price": 12,
-        "stock": 50
+        "stock": 50,
+        "description": "thing to receive packages"
     }
 ]
 
@@ -30,14 +33,15 @@ def populate():
         conn.execute(
             """
             INSERT OR REPLACE INTO catalog
-            (id, name, price, stock)
-            VALUES (?, ?, ?, ?)
+            (id, name, price, stock, description)
+            VALUES (?, ?, ?, ?, ?)
             """,
             (
                 item["id"],
                 item["name"],
                 item["price"],
-                item["stock"]
+                item["stock"],
+                item["description"]
             )
         )
 

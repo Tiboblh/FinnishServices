@@ -37,12 +37,52 @@ def format_lua(items):
 @catalog.route("/api/catalog", methods=["GET"])
 @auth_required
 def catalog_api(token):
+    data = request.get_json(silent=True) or {}
+
+    shop_id = data.get("shop_id", "")
+
+    if shop_id != "":
+        try:
+            shop_id_int = int(shop_id)
+        except Exception as e:
+            return jsonify({"error": e}), 400
+        
+        conn = get_db_connection()
+        items = conn.execute(
+            """
+            SELECT id, shop_id, name, description, price, stock, pack, locked
+            FROM catalog
+            ORDER BY LOWER(name)
+            WHERE 
+            """, (shop_id_int,)
+        ).fetchall()
+
+        items = [dict(item) for item in items]
+
+        force_lua = (
+            request.args.get("format", "").lower() == "lua"
+            or request.headers.get("X-Format", "").lower() == "lua"
+            or request.headers.get("Catalog", "").lower() == "catalog"
+        )
+
+        if force_lua:
+            return (
+                format_lua(items),
+                200,
+                {"Content-Type": "text/plain; charset=utf-8"}
+            )
+
+        return jsonify({
+            "catalog": items
+        })
+
+
 
     conn = get_db_connection()
 
     items = conn.execute(
         """
-        SELECT id, name, description, price, stock, pack, locked
+        SELECT id, shop_id, name, description, price, stock, pack, locked
         FROM catalog
         ORDER BY LOWER(name)
         """
