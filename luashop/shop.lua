@@ -117,8 +117,6 @@ local function sha256_digest(data)
 end
 
 sha256.digest = sha256_digest
-sha256.sha256 = sha256_digest
-sha256.hash = sha256_digest
 sha256.hexdigest = function(data)
     local bytes = sha256_digest(data)
     local hex = {}
@@ -142,6 +140,7 @@ local cartContents = {}
 local pocket = false
 local offline = false -- leave this off, its for development when internet isnt available (and is prob broken lmao)
 local catalogContents = {}
+local mainTerm = term.current
 
 -- string sets, easier to modify like this
 local menuAssets = {
@@ -386,7 +385,7 @@ function contactServer(mode, data)
         end
         return nil
     elseif mode == "catalog_fetch" then
-        local url = serveraddr .. "/api/catalog?format=lua"
+        local url = serveraddr .. "/api/catalog"
         local headers = { ["Authorization"] = "Bearer " .. token }
         clearScreen()
         print("Contacting Server (catalog fetch)...")
@@ -400,23 +399,39 @@ function contactServer(mode, data)
                     body = body:sub(8)
                 end
 
-                -- The server can return Lua source for this endpoint when ?format=lua is used.
-                -- Try parsing it as Lua first, then fall back to JSON if needed.
-                local ok, data = pcall(function()
-                    local compile = loadstring or load
-                    local fn = compile("return " .. body)
+                local data = nil
+
+                -- Try to parse a Lua table literal first (common when server returns a literal export)
+                local ok, parsed = pcall(function()
+                    local fn = load("return " .. body, "catalog_response", "t", _G)
                     if fn then
                         return fn()
                     end
                     return nil
                 end)
-                if ok and type(data) == "table" then
-                    return data
+                if ok and type(parsed) == "table" then
+                    data = parsed
                 end
 
-                local jsonData = textutils.unserializeJSON(body)
-                if type(jsonData) == "table" then
-                    return jsonData
+                -- Fallback to JSON if the server sent real JSON instead.
+                if not data then
+                    data = textutils.unserializeJSON(body)
+                end
+
+                if type(data) == "table" then
+                    local rawFile = fs.open("catalog_raw.json", "w")
+                    if rawFile then
+                        rawFile.write(body)
+                        rawFile.close()
+                    end
+
+                    local catalogFile = fs.open("catalog.txt", "w")
+                    if catalogFile then
+                        catalogFile.write(textutils.serialize(data))
+                        catalogFile.close()
+                    end
+
+                    return data
                 end
             end
         end
@@ -726,10 +741,10 @@ function desktopCatalog()
     local selectedItemIndex = 1 -- init, first item of catalog by default
     local selectedPanel = 0 -- catalog by default, 1 for cart (THIS NEVER GOT USED LMAO)
     local checkout = false -- init, not checking out by default
-    catalogContents = contactServer("catalog_fetch")
+    catalogContents = contactServer("catalog_fetch")["catalog"]
     local totalpage = math.ceil(#catalogContents / 14) -- 14 things per page
     if not catalogContents or catalogContents == nil then
-        error("catalog contents from server is empty, please contact mudkip/tiboblh",2)
+        error("catalog contents from server is empty, please contact mudkip/tiboblh as something has gone wrong.",2)
     end
     clearScreen()
     local cartStartX = 48
@@ -819,7 +834,11 @@ function desktopCatalog()
             term.setCursorPos(itemPackX - 2, itemStartY + count - 1)
             print("|")
             term.setCursorPos(itemPackX, itemStartY + count - 1)
-            if item.pack ~= nil then print(item.pack) else print("1?") end
+            if item.pack then
+                print(item.pack)
+            else
+                print("eror")
+            end
         end
 
         term.setCursorPos(1, selectedItemIndex + 4)
@@ -1000,288 +1019,6 @@ function desktopCatalog()
                 print("Shop list not yet implemented.")
                 waitForEnter()
             end
-        end
-    end
-    checkoutFunc()
-end
-
-function mobileCatalog() -- ill finish this in a later update or something, its rather broken and im lazy
-    clearScreen()
-    local cogs = math.floor(funds / 64)
-    local spurs = funds % 64
-    local curpage = 1
-    local totalpage = math.ceil(#catalogContents / 7) -- 7 things per page (2 line per items)
-    local itemNameX = 1 -- just some misc constants
-    local itemStartY = 2 -- just some misc constants 2
-    local itemPriceX = 21 -- just some misc constants 3
-    local itemStockX = 31 -- just some misc constants 4
-    local itemPackX = 41 -- just some misc constants 5
-    local selectedItemIndex = 1 -- init, first item of catalog by default
-    local panel = 0 -- catalog by default, 1 for shops, 2 for cart (this may actually use this variable :o)
-    local checkout = false -- init, not checking out by default obviously
-    --catalogContents = contactServer("catalog_fetch") -- cant use this yet, tibo needs to implement the full format on server side
-    clearScreen()
-    local cartStartX = 48
-    local cartStartY = 2
-    visualCart = {}
-    do -- fancy format cogs
-        local n = cogs
-        if n >= 1000 then
-            cogs = "999+"
-        else
-            local s = tostring(n)
-            while #s < 7 do
-                s = "0" .. s
-            end
-            cogs = s
-        end
-    end
-
-    do -- fancy format the spurs too
-        local n = spurs
-        local s = tostring(n)
-        while #s < 2 do
-            s = "0" .. s
-        end
-        spurs = s
-    end
-    
-    -- go ahead and check how many items there are for this page, and display them
-    local pageIndexes = getCatalogPageIndexes(curpage)
-    local function calcItemCount(cart)
-        local output = {}
-        local seen = {}
-        for _, entry in ipairs(cart) do
-            if seen[entry.id] then
-                seen[entry.id].count = seen[entry.id].count + entry.count
-            else
-                local item = nil
-                for _, catalogItem in ipairs(catalogContents) do
-                    if catalogItem.id == entry.id then
-                        item = catalogItem
-                        break
-                    end
-                end
-                local itemCopy = {
-                    id = entry.id,
-                    name = item and item.name or entry.name,
-                    count = entry.count * item.pack
-                }
-                seen[entry.id] = itemCopy
-                output[#output + 1] = itemCopy
-            end
-        end
-        return output
-    end
-    local function drawCatalogPage()
-        clearScreen()
-        term.setCursorPos(1, 1)
-        
-        local cartLen = 0
-        for i in ipairs(cartContents) do
-            cartLen = cartLen + 1
-        end
-        
-        term.setTextColor(40)
-        io.write("[Catalog]")
-        term.setTextColor(1)
-        io.write(" [Shops] [Cart (" .. cartLen .. ")]")
-        term.setCursorPos(1, selectedItemIndex + 4)
-        io.write(">")
-        
-
-        pageIndexes = getCatalogPageIndexes(curpage)
-        if selectedItemIndex > #pageIndexes then
-            selectedItemIndex = #pageIndexes
-        end
-        if selectedItemIndex < 1 then
-            selectedItemIndex = 1
-        end
-
-        for count, idx in ipairs(pageIndexes) do -- render the actual item info n stuff
-            local item = catalogContents[idx]
-            term.setCursorPos(itemNameX, itemStartY + count - 1)
-            print(item.name)
-
-            local itemCogs = math.floor(item.price / 64)
-            local itemSpurs = item.price % 64
-            -- format cogs and spurs to fixed 2-char fields
-            local cogField
-            if itemCogs > 99999 then
-                cogField = "a lot" -- too many cogs to display in 2 chars
-            else
-                cogField = string.format("%02d", itemCogs)
-            end
-            local spurField = string.format("%02d", itemSpurs)
-            local pricestr = cogField .. "c " .. spurField .. "s"
-            local numInCart = 0
-            if calcItemCount(cartContents) ~= {} then
-                return tostring(calcItemCount(cartContents)[item.id])
-            else
-                return "0"
-            end
-            local itemStr2 = pricestr .. " / " .. tostring(item.pack) .. numInCart
-            print(itemStr2)
-        end
-
-        
-    end
-
-    local function redrawCart(contents)
-        local cartY = 2
-        -- Clear cart area
-        for i = 4, 16 do
-            term.setCursorPos(48, i)
-            io.write("            ")
-        end
-        -- Draw cart items (up to 7 items)
-        for i = 1, math.min(8, #contents) do
-            local entry = contents[i]
-            local itemStr1 = string.sub(entry.name, 1, 12)
-            term.setCursorPos(48, cartY + (i*2) - 2)
-            io.write(itemStr1)
-            local itemStr2 = " x" .. entry.count
-            term.setCursorPos(48, cartY + (i*2) - 1)
-            io.write(itemStr2)
-        end
-    end
-
-    local function redrawTotal(newTotal)
-        local cogs = math.floor(newTotal / 64)
-        local spurs = newTotal % 64
-        local cogsStr = string.format("%04d", cogs)
-        local spursStr = string.format("%02d", spurs)
-        term.setCursorPos(48, 19)
-        io.write(cogsStr .. "c | " .. spursStr .. "s")
-    end
-
-    local function calculateTotal(cart)
-        local total = 0
-        for _, entry in ipairs(cart) do
-            local item = nil
-            for _, catalogItem in ipairs(catalogContents) do
-                if catalogItem.id == entry.id then
-                    item = catalogItem
-                    break
-                end
-            end
-            if item then
-                total = total + (item.price * entry.count)
-            end
-        end
-        return total
-    end
-
-    
-    visualCart = calcItemCount(cartContents)
-    drawCatalogPage()
-    local panelChange = false
-    while not checkout do
-        if panelChange then
-            clearScreen()
-            sleep(0.1)
-            panelChange = false
-        end
-        local event, key = os.pullEvent("key")
-        if panel == 0 then -- catalog
-            if event == "key" then
-                local keyName = keys.getName(key)
-                if keyName == "up" then -- go up
-                    if selectedItemIndex > 1 then
-                        term.setCursorPos(1, selectedItemIndex + 4)
-                        io.write(" ")
-                        selectedItemIndex = selectedItemIndex - 1
-                        term.setCursorPos(1, selectedItemIndex + 4)
-                        io.write(">")
-                    elseif curpage > 1 then
-                        curpage = curpage - 1
-                        local prevPageIndexes = getCatalogPageIndexes(curpage)
-                        selectedItemIndex = #prevPageIndexes
-                        drawCatalogPage()
-                    end
-                elseif keyName == "down" then -- go down
-                    if selectedItemIndex < #pageIndexes then
-                        term.setCursorPos(1, selectedItemIndex + 4)
-                        io.write(" ")
-                        selectedItemIndex = selectedItemIndex + 1
-                        term.setCursorPos(1, selectedItemIndex + 4)
-                        io.write(">")
-                    else
-                        local nextPageIndexes = getCatalogPageIndexes(curpage + 1)
-                        if #nextPageIndexes > 0 then
-                            curpage = curpage + 1
-                            selectedItemIndex = 1
-                            drawCatalogPage()
-                        end
-                    end
-                elseif keyName == "enter" then -- select (add 2 cart)
-                    local catalogIndex = pageIndexes[selectedItemIndex]
-                    if catalogIndex then
-                        local item = catalogContents[catalogIndex]
-                        local existing = nil
-                        for _, entry in ipairs(cartContents) do
-                            if entry.id == item.id then
-                                existing = entry
-                                break
-                            end
-                        end
-                        if existing then
-                            existing.count = existing.count + 1
-                        else
-                            cartContents[#cartContents + 1] = {
-                                id = item.id,
-                                name = item.name,
-                                count = 1
-                            }
-                        end
-                    end
-                    drawCatalogPage()
-                    visualCart = calcItemCount(cartContents)
-                elseif keyName == "leftCtrl" then -- remove item
-                    local catalogIndex = pageIndexes[selectedItemIndex]
-                    if catalogIndex then
-                        local item = catalogContents[catalogIndex]
-                        local existing = nil
-                        for idx, entry in ipairs(cartContents) do
-                            if entry.id == item.id then
-                                existing = idx
-                                break
-                            end
-                        end
-                        if existing then
-                                table.remove(cartContents, existing)
-                        end
-                    end
-                    drawCatalogPage()
-                    visualCart = calcItemCount(cartContents)
-                    redrawCart(visualCart)
-                    redrawTotal(calculateTotal(cartContents))
-                
-                elseif keyName == "e" then -- exit
-                    sleep(0.1)
-                    clearScreen()
-                    main()
-                    return
-                elseif keyName == "o" then -- options
-                    renderMenu("options")
-                elseif keyName == "rightBracket" then --shopList
-                    panelChange = true
-                    panel = 1
-                end
-            end
-        elseif panel == 1 then -- shops
-            if event == "key" then
-                local keyName = keys.getName(key)
-                if keyName == "leftBracket" then 
-                    panelChange = true
-                    panel = 0
-                elseif keyName == "rightBracket" then -- goto cart 
-                    panelChange = true
-                    panel = 2
-                end
-            end
-        elseif panel == 2 then -- cart/checkout?
-            return 0
         end
     end
     checkoutFunc()
