@@ -620,6 +620,27 @@ Possible errors:
 - `500` database error
 
 ---
+# Shop endpoints
+
+## GET `/api/shop`
+
+Endpoint to get info about a shop.
+User must be authentificated.
+
+Headers:
+```http
+Authorization: Bearer <user-token>
+```
+
+Request body:
+```json
+{"shop_id": 1}
+```
+
+Example response:
+```
+{ id": 1, "shop_name":"Shop Name", "owner":"mr owner man"}
+```
 
 # Admin endpoints
 
