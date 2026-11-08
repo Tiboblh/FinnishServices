@@ -622,6 +622,52 @@ Possible errors:
 ---
 # Shop endpoints
 
+
+## GET `/api/shops`
+
+Returns all available shops.
+
+User must be authenticated.
+
+Headers:
+
+    Authorization: Bearer <user-token>
+
+No request body or parameters required.
+
+### Success response `200`
+
+    [
+      {
+        "id": 1,
+        "shop_name": "Finnish Market",
+        "owner": "alice"
+      },
+      {
+        "id": 2,
+        "shop_name": "Block Store",
+        "owner": "bob"
+      }
+    ]
+
+### Response fields
+
+| Field | Description |
+|---|---|
+| `id` | Unique shop ID |
+| `shop_name` | Name of the shop |
+| `owner` | Username of the shop owner |
+
+If no shops exist, an empty array is returned:
+
+    []
+
+### Possible errors
+
+- `401` unauthorized
+- `500` database error
+
+
 ## GET `/api/shop`
 
 Endpoint to get info about a shop.

@@ -53,3 +53,35 @@ def shop_info(token):
     conn.close()
     
     return jsonify({"id": shop_int, "shop_name": shop["name"], "owner": user["username"]})
+
+
+@shop.route("/api/shops", methods=["GET"])
+@auth_required
+def get_shops(token):
+    conn = get_db_connection()
+
+    try:
+        shops = conn.execute(
+            """
+            SELECT
+                shops.id,
+                shops.name,
+                users.username AS owner
+            FROM shops
+            JOIN users ON shops.user_id = users.id
+            ORDER BY shops.id ASC
+            """
+        ).fetchall()
+
+        return jsonify([
+            {
+                "id": shop["id"],
+                "shop_name": shop["name"],
+                "owner": shop["owner"]
+            }
+            for shop in shops
+        ]), 200
+
+    finally:
+        conn.close()
+
