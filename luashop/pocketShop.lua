@@ -1,3 +1,4 @@
+local cogChar = "§"; local spurChar = "¤"
 ---@diagnostic disable: need-check-nil
 -- lua Shop Client
 -- evil thing by tibo and mudkip
@@ -125,62 +126,99 @@ sha256.hexdigest = function(data)
 end
 
 -- var setup
-local clientVersion = 0.1
-local protocolVersion = 0.1
-local cogChar = "c"; local spurChar = "s"
-local loggedIn = false; currentShop = ""; local connected = false; local username = ""; local token = ""; local funds = 0; local userData = {}; local cartContents = {}; local catalogContents = {}; currentWindow = "" 
+local clientVersion = 1.0
+local protocolVersion = 1.0
+local loggedIn = false; local currentShop = ""; local username = ""; local token = ""; local funds = 0; local userData = {}; local cartContents = {}; local catalogContents = {}; currentWindow = "" 
 local serveraddr = "http://vps-2ddc970b.vps.ovh.net:9142"
 local termX, termY = term.getSize()
-local unused = nil --dummy var to redirect junk stuff
 local mainTerm = term.current()
-
-
-
---window definitions
 local statusBarWindow = window.create(term.current(),1,termY,termX,1)
 
-local tabList = {{id=1,name="Initial Tab",window = tabWin1}}
-local currentTab = 1
-
 --get token, or define the setting if it doesnt exist
-local tokenExists, unused = pcall(settings.getDetails("luashop.token"))
+local tokenExists = pcall(settings.getDetails, "luashop.token")
 if not tokenExists then
     settings.define("luashop.token",{description="the token to login to luashop (do not share this)",default="no token",type="string"})
     settings.save()
-elseif tokenExists then
-    token = settings.get("luashop.token")
-    if (token == "no token") or (not token) then
-        token = ""
-    end
 end
-
+token = settings.get("luashop.token")
+if (token == "no token") or (not token) or (token == "") then
+    token = ""
+end
 local menuStuffs = { -- menuAssets lives on with a different name because i aint feel like hardcoding stuff
     -- types: dialog; just skipped with an enter press, input; you press a key to continue, typing; typing an input then enter to continue,
-    -- multi; content will be a table of types and contents
     -- and a caption can be included for inputs too by the way
     -- 
-    testDialog = {
-        title = "-=<test menu>=-", titleSide = "center", titleLine = true, -- title line is a horizontal line drawn a line below the title
-        type = "dialog", content = {"This is a test dialog.", "a second line! (woah)"},
-        exitKey = {keys.enter, "Enter"}
-    },
-    testInput = {
-        title = "-=<Test Answering>=-", titleSide = "left", titleLine = true,
-        type = "input", content = {{keys.y, "Yes"},{keys.n, "No"}, {keys.three, "Three"}} -- should return the keys.something for what was selected, so return keys.y if y was pressed
-    },
-    testTyping = {
-        title = "-=<Test Typing>=-", titleSide = "right", titleLine = false,
-        type = "typing", content = {"Please type something"} -- return the inputted text
-    },
-    testMulti = {
-        title = "-=<many test (woah)>=-", titleSide = "left", titleLine = true,
-        type = "multi", 
-        content = {
-            {caption="test input",type="input",content={{keys.y, "Yes"},{keys.n, "No"}, {keys.three, "Three"}}},
-            {type = "typing", content = {"Please type something"}},
-            {type = "dialog", content = {"This is a test dialog.", "a second line! (woah)"}}
+    test = {
+        dialog = {
+            title = "-=<test menu>=-", titleSide = "center", titleLine = true, -- title line is a horizontal line drawn a line below the title
+            type = "dialog", content = {"This is a test dialog.", "a second line! (woah)"},
+            exitKey = {keys.enter, "Enter"}
+        },
+        input = {
+            title = "-=<Test Answering>=-", titleSide = "left", titleLine = true,
+            type = "input", content = {"What's the answer?",{keys.y, "Yes"},{keys.n, "No"}, {keys.three, "Three"}} -- should return the keys.something for what was selected, so return keys.y if y was pressed
+        },
+        typing = {
+            title = "-=<Test Typing>=-", titleSide = "right", titleLine = false,
+            type = "typing", content = {"Please type something"}, sensitive = false -- return the inputted text
         }
-    }
+    },
+    main = {
+        loggedOut = {
+            title = "luashop", titleSide = "center", titleLine = true,
+            type = "input", content = {
+                "",
+                {keys.r,"register"},
+                {keys.l,"login"},
+                {keys.e,"exit"}
+            }
+        },
+        loggedIn = {
+            title = "luashop", titleSide = "center", titleLine = true,
+            type = "input", content = {
+                "",
+                {keys.c,"catalog"},
+                {keys.o,"options"},
+                {keys.l,"logout"},
+                {keys.e,"exit"}
+            }
+        }
+    },
+    register = {
+        {
+            title = "register", titleSide = "center", titleLine = true,
+            type = "typing",
+            content = {"username:"}
+        },
+        {
+            title = "register", titleSide = "center", titleLine = true,
+            type = "typing", sensitive = true,
+            content = {"password:"}
+        },
+        {
+            title = "register", titleSide = "center", titleLine = true,
+            type = "typing",
+            content = {"frogport address:"}
+        },
+        {
+            title = "register", titleSide = "center", titleLine = true,
+            type = "input",
+            content = {"use public frogports?", {keys.y,"yes"},{keys.n,"no"}}
+        },
+    },
+    login = {
+        {
+            title = "login", titleSide = "center", titleLine = true,
+            type = "typing",
+            content = {"username:"}
+        },
+        {
+            title = "login", titleSide = "center", titleLine = true,
+            type = "typing", sensitive = true,
+            content = {"password:"}
+        }
+    },
+    
 }
 
 local optionsFuncs = {
@@ -217,7 +255,6 @@ local optionsFuncs = {
     end,
 }
 
-
 local statusBar = {
     init = function()
         statusBarWindow.setBackgroundColor(colors.gray)
@@ -239,8 +276,9 @@ local statusBar = {
             clearstr = clearstr .. " "
         end
         statusBarWindow.write(clearstr)
-        statusBarWindow.write(username)
-    end,
+        statusBarWindow.setCursorPos(1,1)
+        if username then statusBarWindow.write(username) else statusBarWindow.write("no user") end
+     end,
     loading = function ()
         statusBarWindow.setCursorPos((termX - 4),1)
         statusBarWindow.blit("[...]","01110","77777")
@@ -262,10 +300,9 @@ local statusBar = {
         statusBarWindow.blit("[---]","08880","77777")
     end,
     balance = function (status)
-        if not status then
+        if not status then -- print current funds
             local cogs = math.floor((funds or 0) / 64)
             local spurs = (funds or 0) % 64
-
                 do -- fancy format cogs
                     local n = cogs
                     if n >= 100000 then
@@ -286,9 +323,9 @@ local statusBar = {
                     end
                     spurs = s
                 end
-            
-            statusBarWindow.setCursorPos((termX - (#outputStr + 1)),1)
-            
+            local outputStr = cogs .. cogChar .. "|" .. spurs .. spurChar
+            statusBarWindow.setCursorPos(termX - (#outputStr + 5),1)
+            statusBarWindow.write(outputStr)
         else
 
         end
@@ -296,34 +333,156 @@ local statusBar = {
 }
 
 function renderMenu(menu) -- but cooler
-    function renderTitle(titlestr,side,line)
+    local result = ""
+    local function renderTitle(titlestr,side,line)
             if side == "left" then term.setCursorPos(2,1) term.write(titlestr) end
             if side == "center" then term.setCursorPos(math.floor(termX/2) - math.floor(#titlestr/2),1) term.write(titlestr) end
             if side == "right" then term.setCursorPos(termX - (#titlestr + 1),1) term.write(titlestr) end
             if line then term.setCursorPos(1,2) for i = 1, termX do term.write("=") end end
     end
-    function renderDialog(content)
-        
+    local function renderDialog(content,exitKey)
+        local curLine = 3 --starting line, after title and it's line
+        local startingCol = 2 --starting col for left alignment.
+        for _, item in ipairs(content) do
+            if type(item) == "string" then
+                local text = item
+                local col = startingCol
+                while #text > 0 do
+                    local charsToWrite = math.min(termX - 2, #text)
+                    term.setCursorPos(col, curLine)
+                    term.write(text:sub(1, charsToWrite))
+                    text = text:sub(charsToWrite + 1)
+                    col = startingCol
+                    curLine = curLine + 1
+                end
+            elseif type(item) == "table" then
+                if item[1] then
+                    local text = item[2]
+                    local col = startingCol
+                    while #text > 0 do
+                        local charsToWrite = math.min(termX - 2, #text)
+                        term.setCursorPos(col, curLine)
+                        term.write(text:sub(1, charsToWrite))
+                        text = text:sub(charsToWrite + 1)
+                        col = startingCol
+                        curLine = curLine + 1
+                    end
+                end
+            end
+        end
+        term.setCursorPos(math.floor(termX/2 - (#("Press" .. " [" .. exitKey[2] .. "].") /2)),termY-1)
+        term.write("Press" .. "[" .. exitKey[2] .. "]")
+        waitForKey(exitKey[1])
+        clearScreen()
+        result = "dialog result"
     end
-    function renderInput(content)
+    local function renderInput(content)
+        local curLine = 3 -- starting line, after title and its line
+        local startingCol = 2 -- starting col for left alignment.
+        local validKeys = {}
+        statusBar.question()
+        for _, item in ipairs(content) do
+            if type(item) == "string" then
+                local text = item
+                local col = startingCol
+                while #text > 0 do
+                    local charsToWrite = math.min(termX - 2, #text)
+                    term.setCursorPos(col, curLine)
+                    term.write(text:sub(1, charsToWrite))
+                    text = text:sub(charsToWrite + 1)
+                    col = startingCol
+                    curLine = curLine + 1
+                end
+            elseif type(item) == "table" then
+                if item[1] then
+                    local label = " [" .. keys.getName(item[1]) .. "]: " .. tostring(item[2])
+                    local text = label
+                    local col = startingCol
+                    while #text > 0 do
+                        local charsToWrite = math.min(termX - 2, #text)
+                        term.setCursorPos(col, curLine)
+                        term.write(text:sub(1, charsToWrite))
+                        text = text:sub(charsToWrite + 1)
+                        col = startingCol
+                        curLine = curLine + 1
+                    end
+                    validKeys[item[1]] = true
+                end
+            end
+        end
 
+        if next(validKeys) then
+            local selected = nil
+            while not selected do
+                local _, key = os.pullEvent("key")
+                if validKeys[key] then
+                    selected = key
+                end
+            end
+            sleep(0.1)
+            clearScreen()
+            statusBar.idle()
+            result = selected
+        end
     end
-    function renderTyping(content)
-
-    end
-    function renderMulti(content)
-        
+    local function renderTyping(content,sensitive)
+        local curLine = 3 -- starting line, after title and its line
+        local startingCol = 2 -- starting col for left alignment.
+        statusBar.question()
+        for _, item in ipairs(content) do
+            if type(item) == "string" then
+                local text = item
+                local col = startingCol
+                while #text > 0 do
+                    local charsToWrite = math.min(termX - 2, #text)
+                    term.setCursorPos(col, curLine)
+                    term.write(text:sub(1, charsToWrite))
+                    text = text:sub(charsToWrite + 1)
+                    col = startingCol
+                    curLine = curLine + 1
+                end
+            elseif type(item) == "table" then
+                if item[1] then
+                    local label = " [" .. keys.getName(item[1]) .. "]: " .. tostring(item[2])
+                    local text = label
+                    local col = startingCol
+                    while #text > 0 do
+                        local charsToWrite = math.min(termX - 2, #text)
+                        term.setCursorPos(col, curLine)
+                        term.write(text:sub(1, charsToWrite))
+                        text = text:sub(charsToWrite + 1)
+                        col = startingCol
+                        curLine = curLine + 1
+                    end
+                end
+            end
+        end
+        local input = ""
+        term.setCursorPos(startingCol, curLine)
+        term.setBackgroundColor(colors.white); term.setTextColor(colors.black)
+        local curX, curY = term.getCursorPos(); term.setCursorPos(1,curY); for i = 1, termX do term.write(" ") end; term.setCursorPos(curX,curY)
+        if sensitive then  input = read("*") else  input = read() end
+        term.setBackgroundColor(colors.black); term.setTextColor(colors.white)
+        sleep(0.1)
+        result = input
+        clearScreen()
+        statusBar.idle()
     end
     -- handle nonexistent menu data
+    if not menu then clearScreen(); error("menu data is missing", 2) end
     if not menu.titleSide then menu.titleSide = "center" end
     if not menu.titleLine then menu.titleLine = true end
     if not menu.title then menu.title = "missing title, please fix" end
+    if not menu.exitKey then menu.exitKey = keys.enter end
+    if not menu.sensitive then menu.sensitive = false end
 
     renderTitle(menu.title,menu.titleSide,menu.titleLine)
-    --if menu.type == "dialog" then renderDialog(menu.content) end
-    --if menu.type == "input" then renderInput(menu.content) end
-    --if menu.type == "typing" then renderTyping(menu.content) end
-    --if menu.type == "multi" then renderMulti(menu.content) end
+    if not menu then error("menu data is missing", 2) end
+    if menu.type == "dialog" then renderDialog(menu.content,menu.exitKey)
+    elseif menu.type == "input" then renderInput(menu.content)
+    elseif menu.type == "typing" then renderTyping(menu.content)
+    else error("an invalid menu type was called",2) end
+    return result
  end
 
 function waitForKey(checkFor)
@@ -337,9 +496,13 @@ function waitForKey(checkFor)
     end
 end
 
-function clearScreen()
+function clearScreen(hideStatusBar)
     term.clear()
     term.setCursorPos(1, 1)
+    if not hideStatusBar then
+        statusBarWindow.setVisible(false)
+        statusBarWindow.setVisible(true) 
+    end
 end
 
 function str2hexa(s)
@@ -422,22 +585,22 @@ function contactServer(mode, data)
         end
         error("The server did not respond. perhaps you input an already taken username?")
     elseif mode == "user_info" then
+        statusBar.loading()
         local url = serveraddr .. "/api/user_info"
         local headers = {["Authorization"] = "Bearer " .. token}
-        clearScreen()
-        print("Contacting server (fetching user data)...")
         local response = http.get(url, headers)
         clearScreen()
         if response then
+            statusBar.idle()
             local body = response.readAll()
-            if type(body) == "string" and body:sub(1, 7) == "return " then
-                body = body:sub(8)
-            end
             local data = textutils.unserializeJSON(body)
+            
             if type(data) == "table" then
+
                 return data
             end
         end
+        statusBar.idle()
         return nil
     elseif mode == "catalog_fetch" then
         local url = serveraddr .. "/api/catalog"
@@ -456,24 +619,33 @@ function contactServer(mode, data)
 
                 local data = nil
 
-                -- Try to parse a Lua table literal first (common when server returns a literal export)
-                local ok, parsed = pcall(function()
-                    local fn = load("return " .. body, "catalog_response", "t", _G)
-                    if fn then
-                        return fn()
-                    end
-                    return nil
-                end)
+                -- Prefer JSON: valid JSON arrays can also look like Lua tables, but
+                -- JSON booleans/null are not Lua values and can silently lose entries.
+                local ok, parsed = pcall(textutils.unserializeJSON, body)
                 if ok and type(parsed) == "table" then
                     data = parsed
                 end
 
-                -- Fallback to JSON if the server sent real JSON instead.
+                -- Some server versions return a Lua table literal instead of JSON.
                 if not data then
-                    data = textutils.unserializeJSON(body)
+                    ok, parsed = pcall(function()
+                        local compile = loadstring or load
+                        local fn = compile("return " .. body)
+                        return fn and fn()
+                    end)
+                    if ok and type(parsed) == "table" then
+                        data = parsed
+                    end
                 end
 
                 if type(data) == "table" then
+                    for _, key in ipairs({"catalog", "items", "products", "entries", "data"}) do
+                        if type(data[key]) == "table" then
+                            data = data[key]
+                            break
+                        end
+                    end
+
                     local rawFile = fs.open("catalog_raw.json", "w")
                     if rawFile then
                         rawFile.write(body)
@@ -568,7 +740,6 @@ function contactServer(mode, data)
         clearScreen()
         if not response then
             print("Error: Failed to connect to server, no valid response.")
-            debug.debug()
         else
             local contents = response.readAll()
             local responsedata = textutils.unserialiseJSON(contents)
@@ -605,174 +776,164 @@ function contactServer(mode, data)
     end
 end
 
-function login()
-    clearScreen()
-    print(" -<Log in>-")
-    io.write("  Username: ")
-    local username_input = read()
-    print()
-    io.write("  Password: ")
-    local password_input = read("*")
-
-    local payload = {
-        username = username_input,
-        password = str2hexa(sha256.digest(password_input))
-    }
-    local serverResponse = contactServer("login", payload)
-    username = username_input
-    loggedIn = true
-    token = serverResponse["token"]
-    if token == nil then
-        loggedIn = false
-        username = ""
-        clearScreen()
-        print("Token is nil for some reason when tryna login; uh")
-        print("go exit yes press enter") -- maybe i SHOULDNT have smth this stupidly worded, but i aint gonna change it -mudkip
-        waitForKey(keys.enter)
-        exit()
-    end
-    saveToken()
-    main()
-end
-
-function logout()
-    clearScreen()
-    local confirmed = renderMenu("logOutConfirm")
-    if confirmed ~= true then
-        return
-    end
-
-    print("You have been logged out.")
-    print("Press [Enter] to continue.")
-    waitForKey(keys.enter)
-    username = ""
-    token = ""
-    funds = 0
-    userData = {}
-    fs.delete(savePath) -- delete the login.sav file to remove token.
-    loggedIn = false
-    main()
-end
-
 function register()
-    clearScreen()
-    print("-<Register>-")
-    print("Username: ")
-    local username_input = read()
-    print("Password: ")
-    local password_input = read("*")
-    print("Home Frogport Address: ")
-    local home_addr_input = read()
-    print ("Use public frogports? [Y/N]")
-    local public_frogport_input = nil
-    while true do
-        local event, key = os.pullEvent("key")
-        if key == keys.y then
-            public_frogport_input = true
-            break
-        elseif key == keys.n then
-            public_frogport_input = false
-            break
-        end
-    end
-    local payload = {
-        username = username_input,
-        password = str2hexa(sha256.digest(password_input)),
-        home_address = home_addr_input,
-        use_public_frogports = public_frogport_input
-    }
-    local response = contactServer("register", payload)
-    username = response["username"] or username_input
-    funds = response["balance"] or 0
-    token = response["token"] or error("server gave no token after registre, account was created though? (try loggin in seperately)",2)
+    local username, password, address, public = renderMenu(menuStuffs.register[1]),renderMenu(menuStuffs.register[2]),renderMenu(menuStuffs.register[3]),renderMenu(menuStuffs.register[4])
+    if public == keys.y then public = true elseif public == keys.n then public = false end
+    local response = contactServer("register",{username=username,password=str2hexa(sha256.digest(password)),home_address=address,use_public_frogports=public})
+    token = response.token; saveToken()
+    username = response.username; statusBar.username()
     loggedIn = true
-    saveToken()
+    userData = response
+    main()
+end
+
+function login()
+    local username, password = renderMenu(menuStuffs.login[1]),renderMenu(menuStuffs.login[2])
+    password = str2hexa(sha256.digest(password))
+    local response = contactServer("login",{username=username,password=password})
+    token = response.token; saveToken()
+    username = response.username; statusBar.username()
+    loggedIn = true
+    userData = response
     main()
 end
 
 function exit()
     term.setTextColor(colors.white)
     term.setBackgroundColor(colors.black)
-    clearScreen()
+    clearScreen(true)
     error("", 0)
 end
 
-function checkoutFunc()
-    clearScreen()
-    local function calculateTotal(cart)
-        local total = 0
-        for _, entry in ipairs(cart) do
-            local item = nil
-            for _, catalogItem in ipairs(catalogContents) do
-                if catalogItem.id == entry.id then
-                    item = catalogItem
-                    break
-                end
-            end
-            if item then
-                total = total + (item.price * entry.count)
-            end
-        end
-        return total
+function catalog()
+    local tileX, tileY = math.floor(termX/13), math.floor((termY-2)/4)
+    local catalogData = contactServer("catalog_fetch")
+    catalogContents = type(catalogData) == "table" and catalogData or {}
+    local shops = {{id=1,name="luashop",owner="mud + tibo"},{id=3,name="sandvich",owner="lemob"},{id=3,name="three",owner="three"}}
+    local currPage = 1
+    funds = userData["balance"]
+    
+    local function renderTitle(title)
+        title = tostring(title or "")
+        term.setCursorPos(math.floor(termX/2) - math.floor(#title/2), 1)
+        term.write(title)
+        term.setCursorPos(1, 2)
+        for i = 1, termX do term.write("=") end
     end
-    local function calcItemCount(cart)
-        local output = {}
-        local seen = {}
-        for _, entry in ipairs(cart) do
-            if seen[entry.id] then
-                seen[entry.id].count = seen[entry.id].count + entry.count
-            else
-                local item = nil
-                for _, catalogItem in ipairs(catalogContents) do
-                    if catalogItem.id == entry.id then
-                        item = catalogItem
-                        break
-                    end
-                end
-                local pac = 1
-                if item.pack then
-                    pac = item.pack
-                else
-                    pac = 1
-                end
-                local itemCopy = {
-                    id = entry.id,
-                    name = item and item.name or entry.name,
-                    count = entry.count * pac
-                }
-                seen[entry.id] = itemCopy
-                output[#output + 1] = itemCopy
-            end
+
+    local function getCatalogPage(page)
+        local pageSize = tileX*tileY
+        page = tonumber(page) or 1
+        if page < 1 then
+            page = 1
         end
-        return output
+        
+        local totalItems = #catalogContents
+        if totalItems == 0 then
+            return {}
+        end
+
+        local startIndex = (page - 1) * pageSize + 1
+        if startIndex > totalItems then
+            return {}
+        end
+
+        local endIndex = math.min(startIndex + pageSize - 1, totalItems)
+        local pageItems = {}
+        for i = startIndex, endIndex do
+            pageItems[#pageItems + 1] = catalogContents[i]
+        end
+        return pageItems
     end
-    local total = calculateTotal(cartContents)
-    local visualCart = calcItemCount(cartContents)
-    local totalCogs = math.floor(total / 64)
-    local totalSpurs = total % 64
-    do -- fancy format total cogs
-        local n = totalCogs
-        if n >= 1000000 then
-            totalCogs = "999999+"
-        else
-            local s = tostring(n)
-            while #s < 7 do
-                s = "0" .. s
+
+    local function getMatchingCatalogEntry(entry) 
+        for index, item in catalogContents do 
+            if entry == item then 
+                return index
             end
-            totalCogs = s
         end
     end
-    do -- fancy format total spurs
-        local n = totalSpurs
-        local s = tostring(n)
-        while #s < 2 do
-            s = "0" .. s
+
+    local function renderItems(items, highlighted)
+        local compact = false
+        if termX<30 then compact = true end
+        clearScreen()
+        renderTitle("catalog")
+        function renderFull(things,highlight) 
+            local pageSize = math.floor((termY-3)/2)
+            local currPage = getCatalogPage(currPage)
+            local currItem = 1
+            local PriceStr = ""
+            for index, item in ipairs(things) do 
+                if currItem > pageSize then break end
+                local y1 = 3 + (currItem - 1) * 2
+                local y2 = y1 + 1
+                local priceStr = "[" .. math.floor(item.price/64) .. cogChar .. " " .. item.price - math.floor(item.price/64) .. spurChar .. "]"
+                local currHighlight
+                if index == highlight then currHighlight = true end
+                term.setCursorPos(1,y1); if currHighlight then term.setTextColor(colors.yellow) else term.setTextColor(colors.white) end; term.write(item.name); if currHighlight then term.setTextColor(colors.yellow) else term.setTextColor(colors.lightGray) end; term.setCursorPos(termX - #priceStr,y1); term.write(" " .. priceStr)
+                term.setCursorPos(2,y2); term.setTextColor(colors.gray); term.write(item.description)
+                currItem = currItem + 1
+            end
+            term.setTextColor(colors.white)
         end
-        totalSpurs = s
+        function renderCompact(things, highlight) 
+            local pageSize = math.floor((termY-3))
+            local currPage = getCatalogPage(currPage)
+            local currItem = 1
+            local PriceStr = ""
+            for index, item in ipairs(things) do 
+                if currItem > pageSize then break end
+                local y1 = 3 + (currItem - 1)
+                local priceStr = "[" .. math.floor(item.price/64) .. cogChar .. " " .. item.price - math.floor(item.price/64) .. spurChar .. "]"
+                local currHighlight
+                if index == highlight then currHighlight = true end
+                term.setCursorPos(1,y1); if currHighlight then term.setTextColor(colors.yellow) else term.setTextColor(colors.white) end; term.write(item.name); if currHighlight then term.setTextColor(colors.yellow) else term.setTextColor(colors.lightGray) end; term.setCursorPos(termX - #priceStr,y1); term.write(" " .. priceStr)
+                currItem = currItem + 1
+            end
+            term.setTextColor(colors.white)
+        end
+        if compact then renderCompact(items, highlighted) else renderFull(items, highlighted) end
+    end
+    local function shopSelect() 
+        renderTitle("shops")
+        term.setCursorPos(1,3)
+        local selectChars = {"1","2","3","4","5","6","7","8","9","a","b","c","d","e","f","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"}
+        local selectKeys = {keys.one,keys.two,keys.three,keys.four,keys.five,keys.six,keys.seven,keys.eight,keys.nine,keys.a,keys.b,keys.c,keys.d,keys.e,keys.f,keys.h,keys.i,keys.j,keys.k,keys.l,keys.m,keys.n,keys.o,keys.p,keys.q,keys.r,keys.s,keys.t,keys.u,keys.v,keys.w,keys.x,keys.y,keys.z}
+        local curItem = 1
+        local curX = 1
+        for num, shop in ipairs(shops) do 
+            if curItem > termY then curX = curX + floor(termX/2) end
+            term.setCursorPos(curX,curItem)
+            term.write("[" .. selectChars[num] .. "] " .. shop.name)
+            curItem = curItem + 1
+        end
+    end
+
+    shopSelect()
+    local currentPageData = getCatalogPage(currPage)
+    local selected = math.min(1, #currentPageData)
+    while true do
+        renderItems(currentPageData, selected)
+        term.setCursorPos(1,1)
+
+        local _, key = os.pullEvent("key")
+        if #currentPageData > 0 then
+            if key == keys.down then
+                selected = math.min(selected + 1, #currentPageData)
+            elseif key == keys.up then
+                selected = math.max(selected - 1, 1)
+            end
+        end
+        if key == keys.enter then
+            break
+        end
     end
 end
 
+
 function initLogin()
+        if (token == "") or not token then username = "no user"; statusBar.username(); return false end
         local serverResponse = contactServer("user_info")
         if serverResponse and serverResponse ~= nil then
             clearScreen()
@@ -781,26 +942,40 @@ function initLogin()
             userData = serverResponse
             loggedIn = true
             statusBar.username()
+            statusBar.balance()
             statusBar.idle()
         elseif serverResponse == nil then
-           error("server didn't respond with anything, perhaps its down or your token is invalid?\ntry running \"  set luashop.token \"\"  \" to reset it.",2) 
+            ohno("server did not respond", "check connection or token")
         end
-end
+    end
 
 function init()
     clearScreen()
     statusBar.init()
-    if token ~= "" then
+    statusBar.idle()
+    if token or #token>1 then
         initLogin()
     end
 end
 
 function main()
-    -- debug.debug()
-    renderMenu(menuStuffs.testDialog)
+    local currentOption
+    if not loggedIn then
+        currentOption = renderMenu(menuStuffs.main.loggedOut)
+        if currentOption == keys.r then register()
+        elseif currentOption == keys.l then login()
+        elseif currentOption == keys.e then exit()
+        end
+    elseif loggedIn then
+        currentOption = renderMenu(menuStuffs.main.loggedIn)
+        if currentOption == keys.c then catalog()
+        elseif currentOption == keys.o then options()
+        elseif currentOption == keys.e then exit()
+        end
+    end
 end
 
-function ohno(text1,text2)
+function ohno(text1,text2) -- func for when a bad happens
     term.redirect(mainTerm)
     statusBarWindow.setVisible(false)
     term.setBackgroundColor(colors.blue); term.setTextColor(colors.white); term.clear()
@@ -819,9 +994,6 @@ function ohno(text1,text2)
     exit()
 end
 --exec start
--- debug.debug()
 init()
 main()
-term.write("#")
-waitForKey(keys.enter)
-clearScreen()
+exit() --only here for proper render cleanup
