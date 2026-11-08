@@ -688,6 +688,150 @@ Possible errors:
 
 ---
 
+# Admin ATM endpoint
+
+## GET `/api/atm`
+
+Retrieves the balance of a specified account.
+
+Admin-only endpoint. The authenticated account must have `is_admin = 1`.
+
+Headers:
+
+```http
+Authorization: Bearer <admin-token>
+Content-Type: application/json
+```
+
+Request body:
+
+```json
+{
+  "user": 42
+}
+```
+
+The `user` field accepts either a username or a user ID.
+
+Success response `200`:
+
+```json
+{
+  "user": 42,
+  "username": "alice",
+  "balance": 1000
+}
+```
+
+The GET endpoint does not accept an `amount` field.
+
+Possible errors:
+
+- `400` missing or invalid parameters
+- `401` unauthorized
+- `403` admin privileges required
+- `404` account not found
+- `500` database error
+
+---
+
+## POST `/api/atm`
+
+Modifies the balance of a specified account.
+
+Admin-only endpoint. The authenticated account must have `is_admin = 1`.
+
+Headers:
+
+```http
+Authorization: Bearer <admin-token>
+Content-Type: application/json
+```
+
+Request body:
+
+```json
+{
+  "user": 42,
+  "amount": "+500"
+}
+```
+
+### Parameters
+
+| Field | Required | Description |
+|---|---|---|
+| `user` | Yes | Target account username or user ID |
+| `amount` | Yes | Balance modification amount |
+
+### Amount operations
+
+| Amount | Operation |
+|---|---|
+| `100` | Set balance to 100 |
+| `"+100"` | Add 100 to the balance |
+| `"-100"` | Remove 100 from the balance |
+
+Only whole numbers are accepted because account balances use SQLite INTEGER.
+
+Withdrawals cannot exceed the user's current balance. Negative balances are not allowed.
+
+### Example: Set balance
+
+```json
+{
+  "user": 42,
+  "amount": 1000
+}
+```
+
+### Example: Add money
+
+```json
+{
+  "user": "alice",
+  "amount": "+500"
+}
+```
+
+### Example: Remove money
+
+```json
+{
+  "user": 42,
+  "amount": "-250"
+}
+```
+
+### Success response `200`
+
+```json
+{
+  "message": "Balance updated successfully",
+  "user": 42,
+  "username": "alice",
+  "operation": "add",
+  "amount": 500,
+  "old_balance": 1000,
+  "new_balance": 1500
+}
+```
+
+Possible errors:
+
+- `400` missing or invalid parameters, or insufficient funds
+- `401` unauthorized
+- `403` admin privileges required
+- `404` account not found
+- `500` database error
+
+### Security
+
+- Both methods require administrator authentication.
+- Administrators can target accounts using either username or user ID.
+- Passwords and authentication tokens are never returned.
+- Balance modifications use database transactions.
+
 # Database structure
 
 The database uses SQLite.

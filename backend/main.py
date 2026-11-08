@@ -6,6 +6,7 @@ from routes.users import users
 from routes.catalog import catalog
 from routes.orders import orders
 from routes.shop import shop
+from routes.atm import atm
 
 from config import HOST, PORT, DEBUG
 
@@ -16,7 +17,7 @@ app.register_blueprint(shop)
 app.register_blueprint(users)
 app.register_blueprint(catalog)
 app.register_blueprint(orders)
-
+app.register_blueprint(atm)
 
 if __name__ == "__main__":
     init_database()
