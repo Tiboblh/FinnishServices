@@ -110,6 +110,7 @@ def catalog_api(token):
     })
 
 
+
 @catalog.route("/api/change_catalog", methods=["POST"])
 @admin_required
 def change_catalog(token):
@@ -121,7 +122,54 @@ def change_catalog(token):
             "error": "JSON body required"
         }), 400
 
-    required = ("name", "description", "price", "stock", "pack", "locked")
+    # Suppression d'un produit
+    if data.get("delete") is True:
+
+        item_id = data.get("id")
+
+        if not item_id:
+            return jsonify({
+                "error": "Product ID required"
+            }), 400
+
+        try:
+            conn = get_db_connection()
+
+            cursor = conn.execute(
+                "DELETE FROM catalog WHERE id = ?",
+                (item_id,)
+            )
+
+            conn.commit()
+            deleted = cursor.rowcount
+
+            conn.close()
+
+            if deleted == 0:
+                return jsonify({
+                    "error": "Product not found"
+                }), 404
+
+            return jsonify({
+                "success": True,
+                "deleted": True,
+                "id": item_id
+            }), 200
+
+        except Exception as e:
+            return jsonify({
+                "error": str(e)
+            }), 500
+
+    # Ajout d'un produit
+    required = (
+        "name",
+        "description",
+        "price",
+        "stock",
+        "pack",
+        "locked"
+    )
 
     missing = [field for field in required if field not in data]
 
@@ -136,7 +184,8 @@ def change_catalog(token):
 
         cursor = conn.execute(
             """
-            INSERT INTO catalog (name, description, price, stock, pack, locked)
+            INSERT INTO catalog
+            (name, description, price, stock, pack, locked)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
@@ -163,8 +212,8 @@ def change_catalog(token):
         "success": True,
         "item": {
             "id": item_id,
-            "description": data["description"],
             "name": data["name"],
+            "description": data["description"],
             "price": data["price"],
             "stock": data["stock"],
             "pack": data["pack"],

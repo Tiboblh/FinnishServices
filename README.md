@@ -272,32 +272,31 @@ Possible errors:
 
 ---
 
+
 ### POST `/api/change_catalog`
 
-Adds a new catalog item.
+Adds a new catalog item or deletes an existing one.
 
 Requires a valid authenticated user token with admin privileges (`is_admin = 1`).
 
-Headers:
+**Headers:**
 
-```http
-Authorization: Bearer <admin-token>
-```
+    Authorization: Bearer <admin-token>
+
+#### Add a catalog item
 
 Request body:
 
-```json
-{
-  "id": "minecraft:cobblestone",
-  "shop_id": 12,
-  "name": "Cobblestone",
-  "description": "A block of cobblestone",
-  "price": 100,
-  "stock": 640,
-  "pack": 64,
-  "locked": false
-}
-```
+    {
+      "id": "minecraft:cobblestone",
+      "shop_id": 12,
+      "name": "Cobblestone",
+      "description": "A block of cobblestone",
+      "price": 100,
+      "stock": 640,
+      "pack": 64,
+      "locked": false
+    }
 
 Fields:
 
@@ -310,32 +309,50 @@ Fields:
 - `pack` — amount of raw items per pack
 - `locked` — whether the item is locked
 
-Success response `201`:
+**Success response `201`:**
 
-```json
-{
-  "success": true,
-  "item": {
-    "id": "minecraft:cobblestone",
-    "shop_id": 12,
-    "description": "A block of cobblestone",
-    "name": "Cobblestone",
-    "price": 100,
-    "stock": 640,
-    "pack": 64,
-    "locked": false
-  }
-}
-```
+    {
+      "success": true,
+      "item": {
+        "id": "minecraft:cobblestone",
+        "shop_id": 12,
+        "description": "A block of cobblestone",
+        "name": "Cobblestone",
+        "price": 100,
+        "stock": 640,
+        "pack": 64,
+        "locked": false
+      }
+    }
 
-Possible errors:
+#### Delete a catalog item
 
-- `401` unauthorized
-- `400` invalid JSON or missing fields
-- `404` shop not found
-- `500` database error
+To delete an existing catalog item, send `"delete": true` with the item's ID.
 
----
+Request body:
+
+    {
+      "delete": true,
+      "id": "minecraft:cobblestone"
+    }
+
+**Success response `200`:**
+
+    {
+      "success": true,
+      "deleted": true,
+      "id": "minecraft:cobblestone"
+    }
+
+The item is permanently removed from the catalog.
+
+#### Possible errors
+
+- `401` — Unauthorized: missing or invalid token, or insufficient admin privileges.
+- `400` — Invalid JSON, missing required fields, or missing item ID for deletion.
+- `404` — Shop not found (when adding an item) or product not found (when deleting).
+- `500` — Database error.
+
 
 # Orders endpoints
 
