@@ -85,3 +85,101 @@ def get_shops(token):
     finally:
         conn.close()
 
+
+@shop.route("/api/change_shops", methods=["POST"])
+@admin_required
+def change_shops(token):
+
+    data = request.get_json(silent=True)
+
+    if not data:
+        return jsonify({
+            "error": "JSON body required"
+        }), 400
+
+    # Suppression d'un shop
+    if data.get("delete") is True:
+
+        shop_id = data.get("id")
+
+        if not shop_id:
+            return jsonify({
+                "error": "Shop ID required"
+            }), 400
+
+        try:
+            conn = get_db_connection()
+
+            cursor = conn.execute(
+                "DELETE FROM shops WHERE id = ?",
+                (shop_id,)
+            )
+
+            conn.commit()
+            deleted = cursor.rowcount
+
+            conn.close()
+
+            if deleted == 0:
+                return jsonify({
+                    "error": "Shop not found"
+                }), 404
+
+            return jsonify({
+                "success": True,
+                "deleted": True,
+                "id": shop_id
+            }), 200
+
+        except Exception as e:
+            return jsonify({
+                "error": str(e)
+            }), 500
+
+    # Ajout d'un shop
+    required = (
+        "user_id",
+        "name"
+    )
+
+    missing = [field for field in required if field not in data]
+
+    if missing:
+        return jsonify({
+            "error": "Missing fields",
+            "fields": missing
+        }), 400
+
+    try:
+        conn = get_db_connection()
+
+        cursor = conn.execute(
+            """
+            INSERT INTO shops
+            (user_id, name)
+            VALUES (?, ?)
+            """,
+            (
+                data["user_id"],
+                data["name"]
+            )
+        )
+
+        shop_id = cursor.lastrowid
+
+        conn.commit()
+        conn.close()
+
+    except Exception as e:
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+    return jsonify({
+        "success": True,
+        "shop": {
+            "id": shop_id,
+            "user_id": data["user_id"],
+            "name": data["name"]
+        }
+    }), 201
