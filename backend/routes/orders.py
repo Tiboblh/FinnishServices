@@ -425,6 +425,54 @@ def satisfy_delivery_orders(token):
         conn.close()
 
 
+@orders.route("/api/orders/pending", methods=["GET"])
+@admin_required
+def get_pending_orders(token):
+
+    try:
+        conn = get_db_connection()
+
+        rows = conn.execute(
+            """
+            SELECT
+                id,
+                user_id,
+                total,
+                notes,
+                delivered,
+                created_at
+            FROM orders
+            WHERE delivered = 0
+            ORDER BY created_at DESC
+            """
+        ).fetchall()
+
+        conn.close()
+
+        orders = [
+            {
+                "id": row["id"],
+                "user_id": row["user_id"],
+                "total": row["total"],
+                "notes": row["notes"],
+                "delivered": bool(row["delivered"]),
+                "created_at": row["created_at"]
+            }
+            for row in rows
+        ]
+
+        return jsonify({
+            "success": True,
+            "count": len(orders),
+            "orders": orders
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+
 @orders.route("/api/admin", methods=["GET"])
 @admin_required
 def admin_get(token):
